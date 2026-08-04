@@ -9,7 +9,10 @@
 # process to confine — strongest structural isolation of the three modes.
 #
 # AGENT_CMD contract (auto-incident.mjs): WEBHOOK_PAYLOAD env in, submit
-# sentinel written in-box on success, exit 0.
+# sentinel written in-box on success, exit 0. The kickoff vars are forwarded
+# alongside it: AGENT_KICKOFF (the text, rendered host-side from core's one
+# wording) with T0_BUNDLE/WEBHOOK_PAYLOAD as the loop's own fallback — before
+# #107 the loop's T0_BUNDLE branch was dead code, because nothing forwarded it.
 set -euo pipefail
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
@@ -48,6 +51,8 @@ docker exec \
   -e AGENT_WINDOW="${AGENT_WINDOW:-}" \
   -e AGENT_OUT_MAX="${AGENT_OUT_MAX:-}" \
   -e WEBHOOK_PAYLOAD="${WEBHOOK_PAYLOAD:-}" \
+  -e T0_BUNDLE="${T0_BUNDLE:-}" \
+  -e AGENT_KICKOFF="${AGENT_KICKOFF:-}" \
   agent-shell \
   node /usr/local/lib/agent-loop.mjs 2>&1 | tee "$AGENT_LOG" || true
 # (|| true: under pipefail a non-zero loop exit would abort before the sentinel

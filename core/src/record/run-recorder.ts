@@ -14,6 +14,13 @@ export interface FileRunRecorderOptions {
   readonly transcriptHandoffPath?: string;
   /** Optional/best-effort path to an RCA handoff to ingest (writes rca.json/rca.txt). */
   readonly rcaHandoffPath?: string;
+  /**
+   * Optional/best-effort path to the kickoff handoff (`agent-kickoff.v1`) the
+   * automation drops when it launches the agent. Its `kickoff_alert` is the
+   * alert the agent was actually paged on — knowable at kickoff, not at
+   * trigger-poll time — so it reaches the record through this seam (#107).
+   */
+  readonly kickoffHandoffPath?: string;
   /** Optional/best-effort directory to write pruned JSON records to. */
   readonly prunedRecordDir?: string;
   /** Optional/best-effort directory to write full JSON records keyed by SHA-256 to. */
@@ -35,6 +42,7 @@ export class FileRunRecorder implements RunRecorder {
   readonly #baseDir: string;
   readonly #handoffPath?: string;
   readonly #rcaHandoffPath?: string;
+  readonly #kickoffHandoffPath?: string;
   readonly #prunedRecordDir?: string;
   readonly #fullRecordStoreDir?: string;
 
@@ -42,6 +50,7 @@ export class FileRunRecorder implements RunRecorder {
     this.#baseDir = options.baseDir;
     this.#handoffPath = options.transcriptHandoffPath;
     this.#rcaHandoffPath = options.rcaHandoffPath;
+    this.#kickoffHandoffPath = options.kickoffHandoffPath;
     this.#prunedRecordDir = options.prunedRecordDir;
     this.#fullRecordStoreDir = options.fullRecordStoreDir;
   }
@@ -102,7 +111,34 @@ export class FileRunRecorder implements RunRecorder {
       }
     }
 
-    const full = toDiskRecord(record, agentTranscript);
+    // The kickoff alert (#107). Best-effort like every other handoff: a missing
+    // or mismatched file costs the audit field, never the graded record.
+    let recorded = record;
+    if (this.#kickoffHandoffPath && existsSync(this.#kickoffHandoffPath)) {
+      try {
+        const content = await readFile(this.#kickoffHandoffPath, "utf8");
+        const handoff = JSON.parse(content);
+        if (
+          handoff.schema_version !== "agent-kickoff.v1" ||
+          typeof handoff.kickoff_alert !== "string"
+        ) {
+          console.warn("WARNING: Invalid kickoff handoff envelope, skipping ingest");
+        } else if (handoff.run_id === record.runId) {
+          recorded = {
+            ...record,
+            trigger: { ...record.trigger, kickoffAlert: handoff.kickoff_alert },
+          };
+        } else {
+          console.error(
+            `ERROR: Kickoff mismatch: handoff file run_id '${handoff.run_id}' != record runId '${record.runId}'`,
+          );
+        }
+      } catch (err: unknown) {
+        console.warn(`WARNING: Failed to read or parse kickoff handoff at ${this.#kickoffHandoffPath}:`, err instanceof Error ? err.message : err);
+      }
+    }
+
+    const full = toDiskRecord(recorded, agentTranscript);
     writes.push(
       writeFile(
         join(runDir, "record.json"),

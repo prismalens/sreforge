@@ -44,6 +44,7 @@ import { execFileSync } from "node:child_process";
 import { writeFileSync, mkdirSync, readFileSync, existsSync } from "node:fs";
 import { resolve, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
+import { buildKickoffPrompt } from "../../../../../core/dist/context/kickoff.js";
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const env = process.env;
@@ -164,18 +165,17 @@ const SYSTEM = [
 // the symptom-level Alertmanager notification the BOX received (webhook push) —
 // the same data the agent could pull from ALERTMANAGER_URL itself, so no extra
 // de-tell surface. Manual runs keep the generic kickoff.
-const KICKOFF = env.T0_BUNDLE
-  ? "This incident context bundle was just delivered to the incident host:\n" +
-    env.T0_BUNDLE +
-    "\nInvestigate from the alerting stack, find the root cause in the code, " +
-    "apply a fix in /workspace, and submit. When you've fixed it, write a brief postmortem — root cause, evidence you used, what you changed — save it to a file (e.g. postmortem.md) and include it when you submit: submit --rca postmortem.md \"one-line summary\""
-  : env.WEBHOOK_PAYLOAD
-    ? "This alert notification was just delivered to the incident host:\n" +
-      env.WEBHOOK_PAYLOAD +
-      "\nInvestigate from the alerting stack, find the root cause in the code, " +
-      "apply a fix in /workspace, and submit. When you've fixed it, write a brief postmortem — root cause, evidence you used, what you changed — save it to a file (e.g. postmortem.md) and include it when you submit: submit --rca postmortem.md \"one-line summary\""
-    : "An alert is firing for the service. Investigate from the alerting stack, find the root " +
-      "cause in the code, apply a fix in /workspace, and submit. When you've fixed it, write a brief postmortem — root cause, evidence you used, what you changed — save it to a file (e.g. postmortem.md) and include it when you submit: submit --rca postmortem.md \"one-line summary\"";
+//
+// The wording lives in core (buildKickoffPrompt), not here: three drivers used to
+// carry three copies of the same ternary and they drifted. auto-incident renders
+// it once and forwards AGENT_KICKOFF; a manual run assembles the same text from
+// whatever it was given.
+const KICKOFF =
+  env.AGENT_KICKOFF ||
+  buildKickoffPrompt({
+    t0Bundle: env.T0_BUNDLE,
+    webhookPayload: env.WEBHOOK_PAYLOAD,
+  });
 
 const messages = [
   { role: "system", content: SYSTEM },

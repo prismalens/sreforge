@@ -82,6 +82,13 @@ export interface Trigger {
    * signals[0] is the primary and the scalar fields above mirror it.
    */
   readonly signals?: readonly TriggerSignal[];
+  /**
+   * The alert the agent was actually kicked off on — its t=0 headline (#107).
+   * Normally the scenario's declared alert; the first arrival when that alert
+   * was not among the ones delivered. Absent (never null) when the kickoff was
+   * not observed, e.g. an engine-only run with no webhook push.
+   */
+  readonly kickoffAlert?: string;
 }
 
 // ---------------------------------------------------------------------------

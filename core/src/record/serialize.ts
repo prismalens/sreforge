@@ -22,6 +22,8 @@ export interface DiskTrigger {
   labels: Readonly<Record<string, string>>;
   annotations: Readonly<Record<string, string>>;
   fired_at: string;
+  /** The alert the run was actually kicked off on (#107); absent when unknown. */
+  kickoff_alert?: string;
   signals?: readonly {
     alert_name: string;
     severity?: string;
@@ -102,6 +104,7 @@ export function toDiskRecord(record: RunRecord, agentTranscript?: unknown): Disk
       labels: record.trigger.labels,
       annotations: record.trigger.annotations,
       fired_at: record.trigger.firedAt,
+      ...(record.trigger.kickoffAlert !== undefined ? { kickoff_alert: record.trigger.kickoffAlert } : {}),
       ...(record.trigger.signals
         ? {
             signals: record.trigger.signals.map(s => ({
@@ -170,6 +173,7 @@ export function fromDiskRecord(disk: DiskRunRecord): RunRecord {
       labels: disk.trigger.labels,
       annotations: disk.trigger.annotations,
       firedAt: disk.trigger.fired_at,
+      ...(disk.trigger.kickoff_alert !== undefined ? { kickoffAlert: disk.trigger.kickoff_alert } : {}),
       ...(disk.trigger.signals
         ? {
             signals: disk.trigger.signals.map(s => ({

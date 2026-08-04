@@ -11,6 +11,8 @@
 //   OLLAMA_MODEL     default qwen3-coder:480b-cloud
 //   OLLAMA_HOST      default https://ollama.com
 //   MAX_STEPS        default 30
+//   AGENT_KICKOFF    optional — the kickoff text, rendered host-side (preferred)
+//   T0_BUNDLE        optional — assembled t=0 bundle, used when AGENT_KICKOFF is unset
 //   WEBHOOK_PAYLOAD  optional (same kickoff semantics as agent-ollama.mjs)
 //
 // Exit 0 if submitted, 2 if the step budget ran out, 1 on a permanent
@@ -184,18 +186,23 @@ const SYSTEM = [
 ].join("\n");
 
 // Kickoff: symptom-level only — never name the alert cause (de-tell).
-const KICKOFF = env.T0_BUNDLE
-	? "This incident context bundle was just delivered to the incident host:\n" +
-		env.T0_BUNDLE +
-		"\nInvestigate from the alerting stack, find the root cause in the code, " +
-		'apply a fix in /workspace, and submit. When you\'ve fixed it, write a brief postmortem — root cause, evidence you used, what you changed — save it to a file (e.g. postmortem.md) and include it when you submit: submit --rca postmortem.md "one-line summary"'
-	: env.WEBHOOK_PAYLOAD
-		? "This alert notification was just delivered:\n" +
-			env.WEBHOOK_PAYLOAD +
-			"\nInvestigate from the alerting stack, find the root cause in the code, " +
-			'apply a fix in /workspace, and submit. When you\'ve fixed it, write a brief postmortem — root cause, evidence you used, what you changed — save it to a file (e.g. postmortem.md) and include it when you submit: submit --rca postmortem.md "one-line summary"'
-		: "An alert is firing for the service. Investigate from the alerting stack, find the root " +
-			'cause in the code, apply a fix in /workspace, and submit. When you\'ve fixed it, write a brief postmortem — root cause, evidence you used, what you changed — save it to a file (e.g. postmortem.md) and include it when you submit: submit --rca postmortem.md "one-line summary"';
+//
+// The wording is assembled ONCE host-side by core's buildKickoffPrompt and
+// injected as AGENT_KICKOFF (auto-incident.mjs → agent-inbox.sh). This file is
+// baked into the image alone — agent-shell.Dockerfile COPYs exactly one runtime
+// file, from a build context that cannot reach core/dist — so injection is how
+// the box shares that wording instead of keeping a third copy of the ternary.
+// The branch below is the hand-invocation fallback: started in-box with a
+// payload in the env and no AGENT_KICKOFF, the loop still pages honestly.
+const KICKOFF_TAIL =
+	"Investigate from the alerting stack, find the root cause in the code, " +
+	'apply a fix in /workspace, and submit. When you\'ve fixed it, write a brief postmortem — root cause, evidence you used, what you changed — save it to a file (e.g. postmortem.md) and include it when you submit: submit --rca postmortem.md "one-line summary"';
+const DELIVERED = env.T0_BUNDLE || env.WEBHOOK_PAYLOAD;
+const KICKOFF =
+	env.AGENT_KICKOFF ||
+	(DELIVERED
+		? `This incident context bundle was just delivered to the incident host:\n${DELIVERED}\n${KICKOFF_TAIL}`
+		: `An alert is firing for the service. ${KICKOFF_TAIL}`);
 
 const messages = [
 	{ role: "system", content: SYSTEM },

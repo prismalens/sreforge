@@ -123,6 +123,31 @@ test("serialize round-trip with absent optionals", () => {
   assert.equal("exitCode" in restored.ci, false);
 });
 
+// #107 — the alert the run actually kicked off on rides in the record, so the
+// kickoff variance is auditable after the fact.
+test("kickoff alert round-trips as trigger.kickoff_alert", () => {
+  const withKickoff = {
+    ...dummyRecord,
+    trigger: { ...dummyRecord.trigger, kickoffAlert: "HighErrorRate" },
+  };
+
+  const disk = toDiskRecord(withKickoff);
+  assert.equal(disk.trigger.kickoff_alert, "HighErrorRate");
+
+  const restored = fromDiskRecord(disk);
+  assert.equal(restored.trigger.kickoffAlert, "HighErrorRate");
+  assert.deepEqual(restored, withKickoff);
+});
+
+test("kickoff alert is ABSENT, not null, when unknown", () => {
+  const disk = toDiskRecord(dummyRecord);
+  assert.equal("kickoff_alert" in disk.trigger, false);
+
+  const restored = fromDiskRecord(disk);
+  assert.equal("kickoffAlert" in restored.trigger, false);
+  assert.deepEqual(restored, dummyRecord);
+});
+
 test("serializeDiskRecord determinism", () => {
   const disk1 = toDiskRecord(dummyRecord);
   disk1.trigger.labels = { a: "1", b: "2" };

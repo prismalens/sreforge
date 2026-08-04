@@ -130,7 +130,8 @@ The `run-record.v1` schema fields include:
 | Field | Meaning |
 |---|---|
 | `run_id`, `scenario_id`, `profile` | Run + scenario identity |
-| `trigger` | The firing alert that opened the run (`source`, `alert_name`, `severity`, `labels`, `annotations`, `fired_at`, `signals`) |
+| `trigger` | The firing alert that opened the run (`source`, `alert_name`, `severity`, `labels`, `annotations`, `fired_at`, `signals`, `kickoff_alert`) |
+| `trigger.kickoff_alert` | Optional. The alert the agent was actually paged on at t=0: the scenario's expected alert when it was among the delivered notifications, otherwise the first notification that arrived. Written by the automated cycle; absent (not `null`) when the run had no alert push to observe |
 | `trajectory` | What the agent produced: `agent_name`, `diff`, `submitted`, `duration_ms` |
 | `agent_transcript` | Harness-sourced transcript metadata (`harness`, `model`, `provider`, `session`, `confinement`: `host-open` \| `host-sandboxed` \| `in-box`, `captured_at`) |
 | `ci`, `deploy` | CI-gate result and the redeploy result (`null` if not reached) |

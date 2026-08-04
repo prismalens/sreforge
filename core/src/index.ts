@@ -42,6 +42,20 @@ export type { PrometheusAlertTriggerOptions } from "./triggers/index.js";
 // ---- Context (the t=0 incident page) --------------------------------------
 export { IncidentPageRenderer } from "./context/index.js";
 export type { AgentBrief } from "./context/index.js";
+// The t=0 bundle + the one kickoff wording every agent driver renders.
+export {
+  assembleT0Bundle,
+  assertSymptomLevel,
+  buildKickoffPrompt,
+  orderSignalsForKickoff,
+  renderT0Bundle,
+} from "./context/index.js";
+export type {
+  AssembleT0BundleOptions,
+  KickoffPromptInput,
+  SlackTriageMessage,
+  T0Bundle,
+} from "./context/index.js";
 
 // ---- Runner ---------------------------------------------------------------
 export type { AgentRunner } from "./runner/index.js";

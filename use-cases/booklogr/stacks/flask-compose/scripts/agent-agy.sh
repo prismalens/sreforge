@@ -18,7 +18,10 @@ MODEL="${AGY_MODEL:-Claude Opus 4.6 (Thinking)}"
 U="$(id -u):$(id -g)"
 SCRATCH="$(mktemp -d /tmp/agy-incident.XXXXXX)"
 LOG="${AGY_LOG:-$SCRATCH/agy-transcript.txt}"
-PAYLOAD="${WEBHOOK_PAYLOAD:-An alert is firing for the service.}"
+# The assembled t=0 bundle wins when auto-incident produced one — same delivered
+# notifications, deterministically ordered (#107). Raw notification next, generic
+# page last (a manual run with nothing delivered).
+PAYLOAD="${T0_BUNDLE:-${WEBHOOK_PAYLOAD:-An alert is firing for the service.}}"
 
 # ---- per-run srt settings: resolve PROVIDER → egress domains -----------------
 PROVIDER="${PROVIDER:-antigravity}"

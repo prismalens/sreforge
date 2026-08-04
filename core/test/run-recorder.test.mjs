@@ -346,3 +346,77 @@ test("refuses the rca when schema_version is wrong", async () => {
   const written = JSON.parse(readFileSync(join(runDir, "record.json"), "utf8"));
   assert.equal(written.verdict, "passed");
 });
+
+// ---------------------------------------------------------------------------
+// #107 — the kickoff handoff: which alert actually opened the run. Same rules as
+// every other handoff (run-id correlated, best-effort), because the same failure
+// mode applies: a stale file would file the PREVIOUS run's kickoff as this one's.
+// ---------------------------------------------------------------------------
+
+function makeKickoff(dir, runId, alert = "BooklogrApiLatencyP99High") {
+  const p = join(dir, "agent-kickoff.json");
+  writeFileSync(
+    p,
+    JSON.stringify({
+      schema_version: "agent-kickoff.v1",
+      run_id: runId,
+      kickoff_alert: alert,
+    }),
+  );
+  return p;
+}
+
+test("records the kickoff alert when the run id matches", async () => {
+  const base = tmp();
+  const kickoff = makeKickoff(tmp(), RUN_ID, "EdgeClientRequestJitter");
+
+  const runDir = await new FileRunRecorder({
+    baseDir: base,
+    kickoffHandoffPath: kickoff,
+  }).record(makeRecord());
+
+  const written = JSON.parse(readFileSync(join(runDir, "record.json"), "utf8"));
+  assert.equal(written.trigger.kickoff_alert, "EdgeClientRequestJitter");
+  // The trigger the engine polled is untouched — the record carries both truths.
+  assert.equal(written.trigger.alert_name, "BooklogrApiLatencyP99High");
+});
+
+test("refuses the kickoff handoff when the run id does not match", async () => {
+  const base = tmp();
+  const kickoff = makeKickoff(tmp(), "some-other-run");
+
+  const runDir = await new FileRunRecorder({
+    baseDir: base,
+    kickoffHandoffPath: kickoff,
+  }).record(makeRecord());
+
+  const written = JSON.parse(readFileSync(join(runDir, "record.json"), "utf8"));
+  assert.ok(
+    !("kickoff_alert" in written.trigger),
+    "a mismatched kickoff must NOT be filed as this run's evidence",
+  );
+  assert.equal(written.verdict, "passed");
+});
+
+test("a missing or malformed kickoff handoff never costs the record", async () => {
+  const base = tmp();
+  const dir = tmp();
+  const bad = join(dir, "agent-kickoff.json");
+  writeFileSync(bad, "{not json");
+
+  const runDir = await new FileRunRecorder({
+    baseDir: base,
+    kickoffHandoffPath: bad,
+  }).record(makeRecord());
+
+  const written = JSON.parse(readFileSync(join(runDir, "record.json"), "utf8"));
+  assert.ok(!("kickoff_alert" in written.trigger));
+  assert.equal(written.verdict, "passed");
+
+  const absent = await new FileRunRecorder({
+    baseDir: tmp(),
+    kickoffHandoffPath: join(tmp(), "nope.json"),
+  }).record(makeRecord());
+  const written2 = JSON.parse(readFileSync(join(absent, "record.json"), "utf8"));
+  assert.ok(!("kickoff_alert" in written2.trigger));
+});

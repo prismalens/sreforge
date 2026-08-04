@@ -73,3 +73,29 @@ test("camelCase record fails validation", () => {
   const errors = validate(schema, dummyRecord);
   assert.notEqual(errors.length, 0);
 });
+
+// #107 — trigger.kickoff_alert is OPTIONAL: banked historical records carry no
+// such field and must keep validating, while a record that names its kickoff
+// must validate too (the trigger scope is additionalProperties:false, so an
+// unknown key is a hard failure — the schema has to know about it).
+test("record naming its kickoff alert validates", () => {
+  const withKickoff = {
+    ...dummyRecord,
+    trigger: { ...dummyRecord.trigger, kickoffAlert: "HighErrorRate" },
+  };
+  const disk = toDiskRecord(withKickoff, { session: "cold" });
+  assert.equal(disk.trigger.kickoff_alert, "HighErrorRate");
+  assert.deepEqual(validate(schema, disk), []);
+});
+
+test("record without a kickoff alert still validates (optional, absent not null)", () => {
+  const disk = toDiskRecord(dummyRecord, { session: "cold" });
+  assert.ok(!("kickoff_alert" in disk.trigger));
+  assert.deepEqual(validate(schema, disk), []);
+});
+
+test("non-string kickoff_alert fails validation", () => {
+  const disk = toDiskRecord(dummyRecord, { session: "cold" });
+  disk.trigger.kickoff_alert = 42;
+  assert.notEqual(validate(schema, disk).length, 0);
+});

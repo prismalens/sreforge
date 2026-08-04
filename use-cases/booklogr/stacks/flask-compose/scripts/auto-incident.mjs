@@ -12,9 +12,16 @@
 //   3. listener up     webhook-wait.mjs      (BEFORE fire — the box "registers")
 //   4. arm fire        task arm-fire         (re-load + confirm-fire → AM pushes)
 //   5. agent           $AGENT_CMD            (kickoff = the symptom-level payload,
-//                                             via WEBHOOK_PAYLOAD; reasoning
-//                                             host-side — reasoning-in-box is a
-//                                             separate deferred increment)
+//                                             via WEBHOOK_PAYLOAD / T0_BUNDLE /
+//                                             AGENT_KICKOFF; reasoning host-side —
+//                                             reasoning-in-box is a separate
+//                                             deferred increment)
+//
+// The kickoff itself is DETERMINISTIC (#107): the delivered alerts are ordered so
+// the scenario's expected alert leads when it arrived — nothing is dropped and
+// nothing is labelled — and the alert the run actually opened on is handed to the
+// recorder as trigger.kickoff_alert, so a first-arrival kickoff is auditable
+// rather than invisible.
 //   6. grade           task run RUNNER=external  (blocks on the submit sentinel)
 //
 // AGENT_CMD is a CONFIGURABLE command (harness-agnostic, ADR-0001) run with
@@ -26,14 +33,23 @@
 // incident — a repeat-scenario tell); official scoring uses a cold session.
 // =============================================================================
 import { execFileSync, spawn, spawnSync } from "node:child_process";
-import { existsSync, readFileSync, rmSync } from "node:fs";
+import {
+	existsSync,
+	mkdirSync,
+	readFileSync,
+	rmSync,
+	writeFileSync,
+} from "node:fs";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
+import { buildKickoffPrompt } from "../../../../../core/dist/context/kickoff.js";
 import {
 	assembleT0Bundle,
 	renderT0Bundle,
 } from "../../../../../core/dist/context/t0-bundle.js";
+import { resolveKickoff } from "./lib-kickoff.mjs";
 import { parseTriageFeed } from "./lib-storm.mjs";
+import { PRIMARY_ALERT } from "./lib.mjs";
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const STACK = resolve(HERE, "..");
@@ -55,6 +71,14 @@ if (!runId) {
 
 const AGENT_CMD = env.AGENT_CMD || "node scripts/agent-ollama.mjs";
 const WEBHOOK_PORT = Number(env.WEBHOOK_PORT || 8080);
+
+// The scenario's declared alert, resolved EXACTLY as run-incident.mjs resolves
+// it (both read env.ALERT, else the stack's PRIMARY_ALERT from lib.mjs — one
+// source, no second hardcoded copy). The value is BINDING to the scenario's
+// scenario.toml `[expected] alert`: the kickoff, the confirm-fire gate and the
+// oracle must all be talking about the same alert or the run grades one incident
+// while the agent was paged on another.
+const EXPECTED_ALERT = env.ALERT || PRIMARY_ALERT;
 
 const TASK_BIN = (() => {
 	const local = resolve(REPO_ROOT, "node_modules", ".bin", "task");
@@ -166,6 +190,15 @@ try {
 	);
 	process.exit(1);
 }
+// ── the kickoff (#107): deterministic on BOTH paths. The expected alert leads
+// when it is among the delivered ones; otherwise the first arrival stands. Every
+// delivered alert is kept either way — furniture is still part of the agent's
+// picture (ambient realism), it just no longer decides the headline by luck.
+const { signals: kickoffSignals, kickoffAlert } = resolveKickoff(
+	payload.alerts,
+	EXPECTED_ALERT,
+);
+
 let t0BundleJson = "";
 if (payload.schema_version === "storm-capture.v1") {
 	const slackTriage = [];
@@ -181,17 +214,9 @@ if (payload.schema_version === "storm-capture.v1") {
 		}
 	}
 
-	const signals = (payload.alerts || []).map((a) => {
-		const labels = a.labels || {};
-		return {
-			alertName: labels.alertname || "UnknownAlert",
-			severity: labels.severity,
-			labels,
-			annotations: a.annotations || {},
-			firedAt: a.startsAt || new Date().toISOString(),
-		};
-	});
-
+	// Already ordered above — signals[0] IS the kickoff, so the trigger's scalar
+	// fields (which mirror the primary) name it too.
+	const signals = kickoffSignals;
 	if (signals.length > 0) {
 		const trigger = {
 			source: "multi-alert",
@@ -202,7 +227,15 @@ if (payload.schema_version === "storm-capture.v1") {
 			firedAt: signals[0].firedAt,
 			signals,
 		};
-		const bundle = assembleT0Bundle({ runId, trigger, slackTriage });
+		// expectedAlert is passed through: the ordering above already applied it,
+		// and re-applying it is idempotent — the bundle owns the ordering rule so
+		// the two cannot drift apart.
+		const bundle = assembleT0Bundle({
+			runId,
+			trigger,
+			slackTriage,
+			expectedAlert: EXPECTED_ALERT,
+		});
 		t0BundleJson = renderT0Bundle(bundle);
 	}
 }
@@ -213,8 +246,13 @@ const names = [
 	),
 ];
 console.log(
-	`\nauto ── 🔔 alert push received [${names.join(", ")}] → launching agent`,
+	`\nauto ── 🔔 alert push received [${names.join(", ")}] → kickoff ${kickoffAlert ?? "(none)"} → launching agent`,
 );
+if (kickoffAlert && kickoffAlert !== EXPECTED_ALERT) {
+	console.error(
+		`auto: WARN — the scenario's expected alert (${EXPECTED_ALERT}) was not among the delivered notifications; the run kicks off on the first arrival (${kickoffAlert}) and the record says so.`,
+	);
+}
 console.log(`auto ── agent: ${AGENT_CMD}`);
 
 // SECURITY: the agent must never inherit forge credentials (GITEA_TOKEN etc.).
@@ -242,6 +280,7 @@ const AGENT_ENV_DEFAULT = [
 	"AGENT_WINDOW_FLOOR",
 	"AGENT_OUT_MAX_FLOOR",
 	"AGENT_MAX_DEGRADATIONS",
+	"AGENT_KICKOFF",
 	"RUN_ID",
 	"AGY_MODEL",
 ];
@@ -287,6 +326,14 @@ agentEnv.WEBHOOK_PAYLOAD = payloadJson;
 if (t0BundleJson) {
 	agentEnv.T0_BUNDLE = t0BundleJson;
 }
+// The kickoff text, rendered ONCE here from core's one wording and handed to
+// every driver. The in-box loop cannot import core (the sandbox image bakes a
+// single file and its build context cannot reach core/dist), so injection is how
+// it shares the wording instead of keeping a fourth copy of the ternary.
+agentEnv.AGENT_KICKOFF = buildKickoffPrompt({
+	t0Bundle: t0BundleJson,
+	webhookPayload: payloadJson,
+});
 agentEnv.RUN_ID = runId;
 
 // Clear any handoff left by a previous cycle: a stale transcript picked up by
@@ -303,6 +350,32 @@ if (existsSync(transcriptPath)) {
 const rcaPath = resolve(STACK, ".run-workspace", "agent-rca.json");
 if (existsSync(rcaPath)) {
 	rmSync(rcaPath);
+}
+
+// The kickoff handoff (#107): the alert the agent is ACTUALLY paged on, dropped
+// beside the transcript/RCA handoffs and read back by the recorder (run-incident
+// wires the path) into `trigger.kickoff_alert`. It carries the run id for the
+// same reason the transcript does — a stale file must not be filed as this run's
+// evidence — and is rewritten (or cleared) every cycle. The truth is recorded
+// whichever alert won: when the expected alert never arrived, the first arrival
+// is what lands here.
+const kickoffPath = resolve(STACK, ".run-workspace", "agent-kickoff.json");
+if (kickoffAlert) {
+	mkdirSync(dirname(kickoffPath), { recursive: true });
+	writeFileSync(
+		kickoffPath,
+		`${JSON.stringify(
+			{
+				schema_version: "agent-kickoff.v1",
+				run_id: runId,
+				kickoff_alert: kickoffAlert,
+			},
+			null,
+			2,
+		)}\n`,
+	);
+} else if (existsSync(kickoffPath)) {
+	rmSync(kickoffPath);
 }
 
 const agent = spawnSync("sh", ["-c", AGENT_CMD], {

@@ -45,6 +45,7 @@ import {
 	ReferenceFixRunner,
 	runIncident,
 } from "../../../../../core/dist/index.js";
+import { PRIMARY_ALERT } from "./lib.mjs";
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const STACK = resolve(HERE, ".."); // .../stacks/flask-compose
@@ -63,7 +64,11 @@ const TOKEN = env.GITEA_TOKEN;
 const OWNER = env.GITEA_REPO_OWNER || "booklogr";
 const REPO = env.GITEA_REPO_NAME || "booklogr";
 const PROM_URL = env.PROM_URL || "http://localhost:9090";
-const ALERT = env.ALERT || "BooklogrApiLatencyP99High";
+// BINDING to the scenario's scenario.toml `[expected] alert`. auto-incident.mjs
+// resolves the kickoff alert through this exact expression (env.ALERT, else
+// PRIMARY_ALERT) — one source, so the alert the agent is paged on and the alert
+// the oracle grades cannot drift apart (#107).
+const ALERT = env.ALERT || PRIMARY_ALERT;
 const SERVICE = env.SERVICE || "booklogr-api";
 const PROJECT = env.COMPOSE_PROJECT || "booklogr";
 // Deploy from a NEUTRAL symlink so docker-inspect project labels don't leak the
@@ -282,6 +287,10 @@ const deps = {
 			"agent-transcript.json",
 		),
 		rcaHandoffPath: resolve(STACK, ".run-workspace", "agent-rca.json"),
+		// Which alert actually kicked the agent off (#107). auto-incident.mjs drops
+		// it at kickoff; a manual/scripted run has no webhook push, so the file is
+		// simply absent and the record carries no kickoff_alert.
+		kickoffHandoffPath: resolve(STACK, ".run-workspace", "agent-kickoff.json"),
 		prunedRecordDir,
 		fullRecordStoreDir: fullStoreDir,
 	}),

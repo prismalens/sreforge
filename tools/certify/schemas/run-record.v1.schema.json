@@ -26,6 +26,7 @@
         "labels": { "type": "object" },
         "annotations": { "type": "object" },
         "fired_at": { "type": "string" },
+        "kickoff_alert": { "type": "string" },
         "signals": {
           "type": "array",
           "items": {

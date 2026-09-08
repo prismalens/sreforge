@@ -35,6 +35,8 @@ node tools/transcript/write-handoff.mjs \
 
 `--confinement` is required and must be one of `host-open` | `host-sandboxed` | `in-box` — the tier the driver actually ran the agent under. It is a fixed property of the driver, hardcoded per driver, never an env var; an unlabelled handoff is refused so a verdict is never banked with unknown measurement conditions.
 
+`--preflight <ok>` stamps `"preflight": "ok"` in the handoff envelope; any other value or omission stamps `"skipped"`. When `SREFORGE_EXPECTED_HARNESS` is present in the environment, this script asserts it matches `--harness` and refuses to write a mislabelled record on mismatch.
+
 That refusal is enforced at **two** points, because every driver deliberately swallows a handoff failure (ADR-0004 best-effort), so a driver that never calls this script at all would otherwise sail past the guard here:
 
 1. **Write end — this script.** A missing, empty or out-of-enum `--confinement` exits 1; no handoff file is produced.

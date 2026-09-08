@@ -33,6 +33,10 @@ import {
 	assembleT0Bundle,
 	renderT0Bundle,
 } from "../../../../../core/dist/context/t0-bundle.js";
+import {
+	formatBanner,
+	resolveConfig,
+} from "../../../../../tools/transcript/driver-harness.mjs";
 import { parseTriageFeed } from "./lib-storm.mjs";
 
 const HERE = dirname(fileURLToPath(import.meta.url));
@@ -60,6 +64,16 @@ const TASK_BIN = (() => {
 	const local = resolve(REPO_ROOT, "node_modules", ".bin", "task");
 	return existsSync(local) ? local : "task";
 })();
+
+const RESOLVED = resolveConfig(env);
+console.log(formatBanner(RESOLVED));
+
+if (!env.AGENT_CMD && RESOLVED.runner === "external") {
+	console.error(
+		"auto: RUNNER=external with no AGENT_CMD — the run would bank a record attributed to a driver nobody chose. Set AGENT_CMD, or run with RUNNER=scripted.",
+	);
+	process.exit(78);
+}
 
 // ── preflight: the CI runner must be running AND registered with Gitea before arm.
 const confirmRunnerRes = spawnSync(
@@ -244,6 +258,8 @@ const AGENT_ENV_DEFAULT = [
 	"AGENT_MAX_DEGRADATIONS",
 	"RUN_ID",
 	"AGY_MODEL",
+	"PROVIDER",
+	"SREFORGE_EXPECTED_HARNESS",
 ];
 const extraNames = (env.AGENT_ENV_ALLOWLIST || "")
 	.split(",")
@@ -288,6 +304,9 @@ if (t0BundleJson) {
 	agentEnv.T0_BUNDLE = t0BundleJson;
 }
 agentEnv.RUN_ID = runId;
+if (RESOLVED.harness) {
+	agentEnv.SREFORGE_EXPECTED_HARNESS = RESOLVED.harness;
+}
 
 // Clear any handoff left by a previous cycle: a stale transcript picked up by
 // this run would be filed as this run's evidence (the run-id check in the

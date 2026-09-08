@@ -128,3 +128,24 @@ test("10. the Taskfile keeps its env fallbacks", () => {
     );
   }
 });
+
+test("11. the preflight defaults match the driver's", () => {
+  const driverText = readFileSync(
+    resolve(REPO_ROOT, "use-cases/booklogr/stacks/flask-compose/scripts/agent-agy.sh"),
+    "utf8",
+  );
+  const preflightText = readFileSync(
+    resolve(REPO_ROOT, "use-cases/booklogr/stacks/flask-compose/scripts/preflight-agy.sh"),
+    "utf8",
+  );
+
+  const driverModel = driverText.match(/AGY_MODEL:-([^}]+)\}/)?.[1];
+  const preflightModel = preflightText.match(/AGY_MODEL:-([^}]+)\}/)?.[1];
+  assert.ok(driverModel && preflightModel, "Could not find AGY_MODEL defaults");
+  assert.equal(driverModel, preflightModel);
+
+  const driverProvider = driverText.match(/PROVIDER:-([^}]+)\}/)?.[1];
+  const preflightProvider = preflightText.match(/PROVIDER:-([^}]+)\}/)?.[1];
+  assert.ok(driverProvider && preflightProvider, "Could not find PROVIDER defaults");
+  assert.equal(driverProvider, preflightProvider);
+});

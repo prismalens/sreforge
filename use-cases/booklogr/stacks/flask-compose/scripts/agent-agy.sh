@@ -23,6 +23,9 @@ PAYLOAD="${WEBHOOK_PAYLOAD:-An alert is firing for the service.}"
 # ---- per-run srt settings: resolve PROVIDER → egress domains -----------------
 PROVIDER="${PROVIDER:-antigravity}"
 
+export AGY_MODEL="$MODEL" PROVIDER
+bash "$HERE/preflight-agy.sh" || exit $?
+
 if [ -n "${SRT_SETTINGS:-}" ]; then
   # Explicit SRT_SETTINGS wins — skip generation.
   echo "agent-agy: using explicit SRT_SETTINGS=$SRT_SETTINGS"
@@ -138,6 +141,7 @@ node "$(cd "$HERE/../../../../.." && pwd)/tools/transcript/write-handoff.mjs" \
   --confinement "host-sandboxed" \
   --model "$MODEL" \
   --provider "$PROVIDER" \
+  --preflight ok \
   --submitted "$SUBMITTED" \
   --raw-text-file "$LOG" \
   || echo "agent-agy: WARNING — transcript handoff failed (continuing; the run is still gradeable)" >&2
@@ -153,6 +157,7 @@ if docker exec agent-shell cat /workspace/.sreforge/rca.txt > "$RCA_TMP" 2>/dev/
     --confinement "host-sandboxed" \
     --model "$MODEL" \
     --provider "$PROVIDER" \
+    --preflight ok \
     --submitted "$SUBMITTED" \
     --raw-text-file "$RCA_TMP" \
     || echo "agent-agy: WARNING — rca handoff failed (continuing; the run is still gradeable)" >&2

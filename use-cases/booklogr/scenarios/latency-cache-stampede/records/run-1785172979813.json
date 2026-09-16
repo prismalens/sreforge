@@ -1,0 +1,105 @@
+{
+  "agent_transcript": {
+    "captured_at": "2026-07-27T17:32:56.564Z",
+    "confinement": "host-sandboxed",
+    "harness": "agy",
+    "model": "Gemini 3.6 Flash (High)",
+    "provider": "antigravity",
+    "run_id": "run-1785172979813",
+    "schema_version": "agent-transcript.v1",
+    "session": "cold",
+    "submitted": true
+  },
+  "ci": {
+    "duration_ms": 71260,
+    "green": true,
+    "output": "CI success for ae4e9511 (http://localhost:3000/booklogr/booklogr/actions/runs/688)"
+  },
+  "deploy": {
+    "duration_ms": 46541,
+    "redeployed": true,
+    "service": "booklogr-api"
+  },
+  "diff": "diff --git a/api/book_provider.py b/api/book_provider.py\nindex bca146c..d55fbbd 100644\n--- a/api/book_provider.py\n+++ b/api/book_provider.py\n@@ -58,7 +58,7 @@ class BookProvider:\n             \"fields\": \"title,isbn,author_name\",\n             \"lang\": \"en\"\n         }\n-        resp = self.session.get(\"https://openlibrary.org/search.json\", params=params, timeout=30)\n+        resp = self.session.get(\"https://openlibrary.org/search.json\", params=params, timeout=3)\n         resp.raise_for_status()\n         \n         docs = resp.json().get(\"docs\", [])\n@@ -75,14 +75,14 @@ class BookProvider:\n \n     def _search_booklogr_api(self, url, query):\n         \"\"\"Fetcher for the custom sqlite-based search.booklogr.app API\"\"\"\n-        base_url = url if url.startswith(\"http\") else \"https://metadata.booklogr.app\"\n+        base_url = url if url.startswith(\"http\") else \"http://book-metadata:8080\"\n \n         normalized_query = isbn_from_query(query) or query\n         endpoint = f\"{base_url.rstrip('/')}/v1/search/{requests.utils.quote(normalized_query)}\"\n         params = {\"limit\": 10, \"sort\": \"relevance\"}\n         print(endpoint)\n         \n-        resp = self.session.get(endpoint, params=params, timeout=30)\n+        resp = self.session.get(endpoint, params=params, timeout=3)\n         resp.raise_for_status()\n         \n         data = resp.json()\n@@ -108,7 +108,7 @@ class BookProvider:\n     \n     def _get_openlibrary(self, isbn):\n         base = \"https://openlibrary.org\"\n-        resp = self.session.get(f\"{base}/isbn/{isbn}.json\", timeout=30)\n+        resp = self.session.get(f\"{base}/isbn/{isbn}.json\", timeout=3)\n         if resp.status_code != 200:\n             return None\n         \n@@ -117,14 +117,14 @@ class BookProvider:\n         author_name = \"Unknown\"\n         if ol_data.get(\"authors\"):\n             auth_key = ol_data[\"authors\"][0].get(\"key\")\n-            a_resp = self.session.get(f\"{base}{auth_key}.json\", timeout=30)\n+            a_resp = self.session.get(f\"{base}{auth_key}.json\", timeout=3)\n             if a_resp.status_code == 200:\n                 author_name = a_resp.json().get(\"name\", \"Unknown\")\n \n         description = ol_data.get(\"description\")\n         if not description and ol_data.get(\"works\"):\n             work_key = ol_data[\"works\"][0].get(\"key\")\n-            w_resp = self.session.get(f\"{base}{work_key}.json\", timeout=30)\n+            w_resp = self.session.get(f\"{base}{work_key}.json\", timeout=3)\n             if w_resp.status_code == 200:\n                 description = w_resp.json().get(\"description\")\n \n@@ -140,9 +140,9 @@ class BookProvider:\n         }\n     \n     def _get_booklogr_api(self, url, isbn):\n-        base_url = url if url.startswith(\"http\") else \"https://metadata.booklogr.app\"\n+        base_url = url if url.startswith(\"http\") else \"http://book-metadata:8080\"\n         \n-        ed_resp = self.session.get(f\"{base_url.rstrip('/')}/v1/edition/{isbn}\", timeout=30)\n+        ed_resp = self.session.get(f\"{base_url.rstrip('/')}/v1/edition/{isbn}\", timeout=3)\n         if ed_resp.status_code != 200:\n             return None\n         \n@@ -155,7 +155,7 @@ class BookProvider:\n         work_ids = ed_data.get(\"work_ids\", [])\n         if work_ids:\n             work_id = work_ids[0].replace(\"/works/\", \"\")\n-            w_resp = self.session.get(f\"{base_url.rstrip('/')}/v1/work/{work_id}\", timeout=30)\n+            w_resp = self.session.get(f\"{base_url.rstrip('/')}/v1/work/{work_id}\", timeout=3)\n             if w_resp.status_code == 200:\n                 work_data = w_resp.json()\n                 description = work_data.get(\"description\", \"\")\ndiff --git a/api/config.py b/api/config.py\nindex 6484285..f0b7674 100644\n--- a/api/config.py\n+++ b/api/config.py\n@@ -14,7 +14,7 @@ class Config:\n     SINGLE_USER_MODE = os.environ.get(\"SINGLE_USER_MODE\", \"False\")\n     AUTH_REQUIRE_VERIFICATION = os.environ.get(\"AUTH_REQUIRE_VERIFICATION\", \"False\")\n     DATA_PROVIDER = os.environ.get(\"DATA_PROVIDER\", \"openlibrary\")\n-    DATA_PROVIDER_FALLBACK = os.environ.get(\"DATA_PROVIDER_FALLBACK\", \"https://metadata.booklogr.app\")\n+    DATA_PROVIDER_FALLBACK = os.environ.get(\"DATA_PROVIDER_FALLBACK\", \"http://book-metadata:8080\")\n     \n     MAIL_SERVER = os.environ.get(\"MAIL_SERVER\", None)\n     MAIL_PORT = os.environ.get(\"MAIL_PORT\", 587)\n@@ -23,7 +23,7 @@ class Config:\n     MAIL_PASSWORD = os.environ.get(\"MAIL_PASSWORD\", None)\n     MAIL_DEFAULT_SENDER = os.environ.get(\"MAIL_SENDER\", os.environ.get(\"MAIL_USERNAME\"))\n \n-    CACHE_TYPE = \"NullCache\"\n+    CACHE_TYPE = os.environ.get(\"CACHE_TYPE\", \"SimpleCache\")\n     CACHE_DEFAULT_TIMEOUT = 300\n \n     BASE_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), \"..\"))\ndiff --git a/postmortem.md b/postmortem.md\nnew file mode 100644\nindex 0000000..fa6c5d6\n--- /dev/null\n+++ b/postmortem.md\n@@ -0,0 +1,28 @@\n+# Incident Postmortem: EdgeClientRequestJitter & BooklogrApiLatencyP99High\n+\n+## Summary\n+The `booklogr-api` service experienced high p99 HTTP latency (>2.4s) and edge client request jitter. The root cause was a combination of disabled response caching (`CACHE_TYPE = \"NullCache\"` introduced in commit `f127661`), long 30-second HTTP request timeouts when querying external providers in `BookProvider`, and default fallback configuration attempting to reach external domain `https://metadata.booklogr.app` instead of the local metadata instance at `http://book-metadata:8080`.\n+\n+## Root Cause\n+1. Commit `f127661` changed `CACHE_TYPE` in `api/config.py` from `\"SimpleCache\"` to `\"NullCache\"`. This disabled Flask `@cache.cached` response caching on `/v1/books/search`, forcing every search request to execute live provider lookups.\n+2. In `api/book_provider.py`, HTTP lookups for external metadata providers (`https://openlibrary.org` and `https://metadata.booklogr.app`) had a 30-second timeout. Because external network access is blocked/unavailable in the deployment environment, requests to primary provider (`openlibrary`) timed out for 30s before falling back to `https://metadata.booklogr.app`, which also timed out for 30s.\n+3. This blocked sync Gunicorn worker threads (`-w 4`) for 30–60s per request, quickly exhausting available workers and causing request queuing, severe latency spikes (p99 > 2.4s), and traffic generator jitter.\n+\n+## Key Evidence Used\n+- Alertmanager active alerts: `BooklogrApiLatencyP99High` (p99 latency 2.485s vs 300ms threshold) and `EdgeClientRequestJitter`.\n+- Prometheus metrics (`flask_http_request_duration_seconds`): `/v1/books/search` endpoint had high average duration (~1.37s to >2.4s).\n+- Prometheus targets (`/api/v1/targets`): Showed `book-metadata:8080` active in the internal network environment and responding instantly (`curl http://book-metadata:8080/v1/search/test`).\n+- Git commit inspection (`git show f127661`): Identified commit disabling response caching by setting `CACHE_TYPE = \"NullCache\"`.\n+- Connectivity tests (`curl` with `-m 5`): Confirmed external domain requests to `https://openlibrary.org` and `https://metadata.booklogr.app` timed out due to no internet access in the isolated environment.\n+\n+## Changes Made\n+1. **`api/config.py`**:\n+   - Re-enabled response caching by setting `CACHE_TYPE = os.environ.get(\"CACHE_TYPE\", \"SimpleCache\")`.\n+   - Updated default `DATA_PROVIDER_FALLBACK` to point to the local service `http://book-metadata:8080`.\n+2. **`api/book_provider.py`**:\n+   - Updated default fallback URL from `https://metadata.booklogr.app` to `http://book-metadata:8080`.\n+   - Reduced outbound HTTP request timeouts from 30s to 3s to prevent Gunicorn worker thread starvation when primary providers fail.\n+\n+## Verification\n+- Verified git status and staged edits.\n+- Confirmed `http://book-metadata:8080` returns responses in milliseconds.\n",
+  "finished_at": "2026-07-27T17:41:28.759Z",
+  "full_record_sha256": "599242d1300d7f9c360a1b672e2e6e0b4ff80a405d16123bc4e0540dd29f31d4",
+  "kind": "run-record",
+  "profile": "incident",
+  "record_version": "1.0.0",
+  "run_id": "run-1785172979813",
+  "scenario_id": "latency-cache-stampede",
+  "score": {
+    "oracle_id": "mitigation",
+    "passed": true,
+    "score": 0.9949953333333333,
+    "signals": [
+      {
+        "detail": "CI build + existing tests passed",
+        "id": "ci_green",
+        "satisfied": true,
+        "value": 1,
+        "weight": 0.25
+      },
+      {
+        "detail": "alert BooklogrApiLatencyP99High cleared within budget",
+        "id": "alert_cleared",
+        "satisfied": true,
+        "value": 1,
+        "weight": 0.35
+      },
+      {
+        "detail": "alert stayed cleared for 360s",
+        "id": "sustained_clear",
+        "satisfied": true,
+        "value": 1,
+        "weight": 0.2
+      },
+      {
+        "detail": "cleared in 30s",
+        "id": "time_to_clear",
+        "satisfied": true,
+        "value": 0.9499533333333333,
+        "weight": 0.1
+      },
+      {
+        "detail": "no regression alerts",
+        "id": "no_new_alerts",
+        "satisfied": true,
+        "value": 1,
+        "weight": 0.1
+      }
+    ]
+  },
+  "started_at": "2026-07-27T17:32:57.364Z",
+  "timings": {
+    "ci": 71260,
+    "context": 0,
+    "merge": 417,
+    "redeploy": 46541,
+    "run": 2780,
+    "trigger": 39,
+    "verify": 390358
+  },
+  "trajectory": {
+    "agent_name": "external",
+    "diff": "diff --git a/api/book_provider.py b/api/book_provider.py\nindex bca146c..d55fbbd 100644\n--- a/api/book_provider.py\n+++ b/api/book_provider.py\n@@ -58,7 +58,7 @@ class BookProvider:\n             \"fields\": \"title,isbn,author_name\",\n             \"lang\": \"en\"\n         }\n-        resp = self.session.get(\"https://openlibrary.org/search.json\", params=params, timeout=30)\n+        resp = self.session.get(\"https://openlibrary.org/search.json\", params=params, timeout=3)\n         resp.raise_for_status()\n         \n         docs = resp.json().get(\"docs\", [])\n@@ -75,14 +75,14 @@ class BookProvider:\n \n     def _search_booklogr_api(self, url, query):\n         \"\"\"Fetcher for the custom sqlite-based search.booklogr.app API\"\"\"\n-        base_url = url if url.startswith(\"http\") else \"https://metadata.booklogr.app\"\n+        base_url = url if url.startswith(\"http\") else \"http://book-metadata:8080\"\n \n         normalized_query = isbn_from_query(query) or query\n         endpoint = f\"{base_url.rstrip('/')}/v1/search/{requests.utils.quote(normalized_query)}\"\n         params = {\"limit\": 10, \"sort\": \"relevance\"}\n         print(endpoint)\n         \n-        resp = self.session.get(endpoint, params=params, timeout=30)\n+        resp = self.session.get(endpoint, params=params, timeout=3)\n         resp.raise_for_status()\n         \n         data = resp.json()\n@@ -108,7 +108,7 @@ class BookProvider:\n     \n     def _get_openlibrary(self, isbn):\n         base = \"https://openlibrary.org\"\n-        resp = self.session.get(f\"{base}/isbn/{isbn}.json\", timeout=30)\n+        resp = self.session.get(f\"{base}/isbn/{isbn}.json\", timeout=3)\n         if resp.status_code != 200:\n             return None\n         \n@@ -117,14 +117,14 @@ class BookProvider:\n         author_name = \"Unknown\"\n         if ol_data.get(\"authors\"):\n             auth_key = ol_data[\"authors\"][0].get(\"key\")\n-            a_resp = self.session.get(f\"{base}{auth_key}.json\", timeout=30)\n+            a_resp = self.session.get(f\"{base}{auth_key}.json\", timeout=3)\n             if a_resp.status_code == 200:\n                 author_name = a_resp.json().get(\"name\", \"Unknown\")\n \n         description = ol_data.get(\"description\")\n         if not description and ol_data.get(\"works\"):\n             work_key = ol_data[\"works\"][0].get(\"key\")\n-            w_resp = self.session.get(f\"{base}{work_key}.json\", timeout=30)\n+            w_resp = self.session.get(f\"{base}{work_key}.json\", timeout=3)\n             if w_resp.status_code == 200:\n                 description = w_resp.json().get(\"description\")\n \n@@ -140,9 +140,9 @@ class BookProvider:\n         }\n     \n     def _get_booklogr_api(self, url, isbn):\n-        base_url = url if url.startswith(\"http\") else \"https://metadata.booklogr.app\"\n+        base_url = url if url.startswith(\"http\") else \"http://book-metadata:8080\"\n         \n-        ed_resp = self.session.get(f\"{base_url.rstrip('/')}/v1/edition/{isbn}\", timeout=30)\n+        ed_resp = self.session.get(f\"{base_url.rstrip('/')}/v1/edition/{isbn}\", timeout=3)\n         if ed_resp.status_code != 200:\n             return None\n         \n@@ -155,7 +155,7 @@ class BookProvider:\n         work_ids = ed_data.get(\"work_ids\", [])\n         if work_ids:\n             work_id = work_ids[0].replace(\"/works/\", \"\")\n-            w_resp = self.session.get(f\"{base_url.rstrip('/')}/v1/work/{work_id}\", timeout=30)\n+            w_resp = self.session.get(f\"{base_url.rstrip('/')}/v1/work/{work_id}\", timeout=3)\n             if w_resp.status_code == 200:\n                 work_data = w_resp.json()\n                 description = work_data.get(\"description\", \"\")\ndiff --git a/api/config.py b/api/config.py\nindex 6484285..f0b7674 100644\n--- a/api/config.py\n+++ b/api/config.py\n@@ -14,7 +14,7 @@ class Config:\n     SINGLE_USER_MODE = os.environ.get(\"SINGLE_USER_MODE\", \"False\")\n     AUTH_REQUIRE_VERIFICATION = os.environ.get(\"AUTH_REQUIRE_VERIFICATION\", \"False\")\n     DATA_PROVIDER = os.environ.get(\"DATA_PROVIDER\", \"openlibrary\")\n-    DATA_PROVIDER_FALLBACK = os.environ.get(\"DATA_PROVIDER_FALLBACK\", \"https://metadata.booklogr.app\")\n+    DATA_PROVIDER_FALLBACK = os.environ.get(\"DATA_PROVIDER_FALLBACK\", \"http://book-metadata:8080\")\n     \n     MAIL_SERVER = os.environ.get(\"MAIL_SERVER\", None)\n     MAIL_PORT = os.environ.get(\"MAIL_PORT\", 587)\n@@ -23,7 +23,7 @@ class Config:\n     MAIL_PASSWORD = os.environ.get(\"MAIL_PASSWORD\", None)\n     MAIL_DEFAULT_SENDER = os.environ.get(\"MAIL_SENDER\", os.environ.get(\"MAIL_USERNAME\"))\n \n-    CACHE_TYPE = \"NullCache\"\n+    CACHE_TYPE = os.environ.get(\"CACHE_TYPE\", \"SimpleCache\")\n     CACHE_DEFAULT_TIMEOUT = 300\n \n     BASE_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), \"..\"))\ndiff --git a/postmortem.md b/postmortem.md\nnew file mode 100644\nindex 0000000..fa6c5d6\n--- /dev/null\n+++ b/postmortem.md\n@@ -0,0 +1,28 @@\n+# Incident Postmortem: EdgeClientRequestJitter & BooklogrApiLatencyP99High\n+\n+## Summary\n+The `booklogr-api` service experienced high p99 HTTP latency (>2.4s) and edge client request jitter. The root cause was a combination of disabled response caching (`CACHE_TYPE = \"NullCache\"` introduced in commit `f127661`), long 30-second HTTP request timeouts when querying external providers in `BookProvider`, and default fallback configuration attempting to reach external domain `https://metadata.booklogr.app` instead of the local metadata instance at `http://book-metadata:8080`.\n+\n+## Root Cause\n+1. Commit `f127661` changed `CACHE_TYPE` in `api/config.py` from `\"SimpleCache\"` to `\"NullCache\"`. This disabled Flask `@cache.cached` response caching on `/v1/books/search`, forcing every search request to execute live provider lookups.\n+2. In `api/book_provider.py`, HTTP lookups for external metadata providers (`https://openlibrary.org` and `https://metadata.booklogr.app`) had a 30-second timeout. Because external network access is blocked/unavailable in the deployment environment, requests to primary provider (`openlibrary`) timed out for 30s before falling back to `https://metadata.booklogr.app`, which also timed out for 30s.\n+3. This blocked sync Gunicorn worker threads (`-w 4`) for 30–60s per request, quickly exhausting available workers and causing request queuing, severe latency spikes (p99 > 2.4s), and traffic generator jitter.\n+\n+## Key Evidence Used\n+- Alertmanager active alerts: `BooklogrApiLatencyP99High` (p99 latency 2.485s vs 300ms threshold) and `EdgeClientRequestJitter`.\n+- Prometheus metrics (`flask_http_request_duration_seconds`): `/v1/books/search` endpoint had high average duration (~1.37s to >2.4s).\n+- Prometheus targets (`/api/v1/targets`): Showed `book-metadata:8080` active in the internal network environment and responding instantly (`curl http://book-metadata:8080/v1/search/test`).\n+- Git commit inspection (`git show f127661`): Identified commit disabling response caching by setting `CACHE_TYPE = \"NullCache\"`.\n+- Connectivity tests (`curl` with `-m 5`): Confirmed external domain requests to `https://openlibrary.org` and `https://metadata.booklogr.app` timed out due to no internet access in the isolated environment.\n+\n+## Changes Made\n+1. **`api/config.py`**:\n+   - Re-enabled response caching by setting `CACHE_TYPE = os.environ.get(\"CACHE_TYPE\", \"SimpleCache\")`.\n+   - Updated default `DATA_PROVIDER_FALLBACK` to point to the local service `http://book-metadata:8080`.\n+2. **`api/book_provider.py`**:\n+   - Updated default fallback URL from `https://metadata.booklogr.app` to `http://book-metadata:8080`.\n+   - Reduced outbound HTTP request timeouts from 30s to 3s to prevent Gunicorn worker thread starvation when primary providers fail.\n+\n+## Verification\n+- Verified git status and staged edits.\n+- Confirmed `http://book-metadata:8080` returns responses in milliseconds.\n",
+    "duration_ms": 2780,
+    "submitted": true
+  },
+  "trigger": {
+    "alert_name": "BooklogrApiLatencyP99High",
+    "annotations": {
+      "description": "p99 HTTP request latency is 2.484s (threshold 300ms) for the booklogr-api service.",
+      "summary": "High p99 request latency on booklogr-api"
+    },
+    "fired_at": "2026-07-27T17:24:01.403162381Z",
+    "labels": {
+      "alertname": "BooklogrApiLatencyP99High",
+      "service": "booklogr-api",
+      "severity": "critical"
+    },
+    "severity": "critical",
+    "source": "prometheus-alert"
+  },
+  "verdict": "passed"
+}

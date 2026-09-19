@@ -13,8 +13,8 @@ const SCRIPT = resolve(HERE, "../write-handoff.mjs");
 // spawnSync, not execFileSync: execFileSync only returns stdout, so stderr on a
 // successful (exit 0) run is lost — and the invalid-JSON warning is exactly that
 // case. spawnSync gives us both streams regardless of exit code.
-function runScript(args) {
-  const r = spawnSync("node", [SCRIPT, ...args], { encoding: "utf8" });
+function runScript(args, env = process.env) {
+  const r = spawnSync("node", [SCRIPT, ...args], { encoding: "utf8", env });
   return { status: r.status, stdout: r.stdout || "", stderr: r.stderr || "" };
 }
 
@@ -216,4 +216,124 @@ test("--kind rca --raw-json-file exits non-zero", () => {
   ]);
   assert.equal(result.status, 1);
   assert.match(result.stderr, /rca handoff requires --raw-text-file/);
+});
+
+test("SREFORGE_EXPECTED_HARNESS mismatch exits 1 and reports error", () => {
+  const result = runScript(
+    [
+      "--out", "/tmp/out.json",
+      "--run-id", "123",
+      "--harness", "agy",
+      "--session", "cold",
+      "--confinement", "host-sandboxed",
+      "--raw-text-file", "/dev/null",
+    ],
+    { ...process.env, SREFORGE_EXPECTED_HARNESS: "ollama" },
+  );
+  assert.equal(result.status, 1);
+  assert.match(result.stderr, /Harness mismatch/);
+});
+
+test("SREFORGE_EXPECTED_HARNESS matching resolved harness exits 0 and writes handoff", () => {
+  const d = mkdtempSync(join(tmpdir(), "sreforge-test-"));
+  const txtPath = join(d, "raw.txt");
+  const outPath = join(d, "out.json");
+  writeFileSync(txtPath, "hello world", "utf8");
+
+  const result = runScript(
+    [
+      "--out", outPath,
+      "--run-id", "123",
+      "--harness", "agy",
+      "--session", "cold",
+      "--confinement", "host-sandboxed",
+      "--raw-text-file", txtPath,
+    ],
+    { ...process.env, SREFORGE_EXPECTED_HARNESS: "agy" },
+  );
+  assert.equal(result.status, 0);
+  const out = JSON.parse(readFileSync(outPath, "utf8"));
+  assert.equal(out.harness, "agy");
+});
+
+test("SREFORGE_EXPECTED_HARNESS unset exits 0 (assertion is opt-in)", () => {
+  const d = mkdtempSync(join(tmpdir(), "sreforge-test-"));
+  const txtPath = join(d, "raw.txt");
+  const outPath = join(d, "out.json");
+  writeFileSync(txtPath, "hello world", "utf8");
+
+  const env = { ...process.env };
+  delete env.SREFORGE_EXPECTED_HARNESS;
+
+  const result = runScript(
+    [
+      "--out", outPath,
+      "--run-id", "123",
+      "--harness", "agy",
+      "--session", "cold",
+      "--confinement", "host-sandboxed",
+      "--raw-text-file", txtPath,
+    ],
+    env,
+  );
+  assert.equal(result.status, 0);
+});
+
+test("absent --preflight stamps 'skipped' in written JSON", () => {
+  const d = mkdtempSync(join(tmpdir(), "sreforge-test-"));
+  const txtPath = join(d, "raw.txt");
+  const outPath = join(d, "out.json");
+  writeFileSync(txtPath, "hello world", "utf8");
+
+  const result = runScript([
+    "--out", outPath,
+    "--run-id", "123",
+    "--harness", "agy",
+    "--session", "cold",
+    "--confinement", "host-sandboxed",
+    "--raw-text-file", txtPath,
+  ]);
+  assert.equal(result.status, 0);
+  const out = JSON.parse(readFileSync(outPath, "utf8"));
+  assert.equal(out.preflight, "skipped");
+});
+
+test("--preflight ok stamps 'ok' in written JSON", () => {
+  const d = mkdtempSync(join(tmpdir(), "sreforge-test-"));
+  const txtPath = join(d, "raw.txt");
+  const outPath = join(d, "out.json");
+  writeFileSync(txtPath, "hello world", "utf8");
+
+  const result = runScript([
+    "--out", outPath,
+    "--run-id", "123",
+    "--harness", "agy",
+    "--session", "cold",
+    "--confinement", "host-sandboxed",
+    "--preflight", "ok",
+    "--raw-text-file", txtPath,
+  ]);
+  assert.equal(result.status, 0);
+  const out = JSON.parse(readFileSync(outPath, "utf8"));
+  assert.equal(out.preflight, "ok");
+});
+
+test("--preflight non-ok value stamps 'skipped' in written JSON", () => {
+  const d = mkdtempSync(join(tmpdir(), "sreforge-test-"));
+  const txtPath = join(d, "raw.txt");
+  const outPath = join(d, "out.json");
+  writeFileSync(txtPath, "hello world", "utf8");
+
+  const result = runScript([
+    "--out", outPath,
+    "--run-id", "123",
+    "--harness", "agy",
+    "--session", "cold",
+    "--confinement", "host-sandboxed",
+    "--preflight", "yes",
+    "--raw-text-file", txtPath,
+  ]);
+  assert.equal(result.status, 0);
+  const out = JSON.parse(readFileSync(outPath, "utf8"));
+  assert.equal(out.preflight, "skipped");
 });

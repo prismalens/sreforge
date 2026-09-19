@@ -55,7 +55,7 @@ downloads the Task binary) is permitted under pnpm's default script blocking.
 | **bring-up** | per session | `up.sh` | | |
 | **quiesce** | pre-arm | `quiesce.sh` | `confirm-quiesced.mjs` | |
 | **arm** | per run | `arm-incident.sh` | `confirm-fire.mjs` | |
-| **agent** | per run | `prepare-agent-workspace.sh` | | |
+| **agent** | per run | `prepare-agent-workspace.sh` | `preflight-agy.sh` (pre-flight for `agent-agy.sh`) | |
 | **run** | per run | `run-incident.mjs` | `confirm-runner.mjs` (pre-flight), `warm-cache.sh` (readiness gate) | |
 | **verify** | any time | `verify-boundary.sh`, `verify-alert-pickup.sh`, `verify-detell.sh`, `verify-clear.mjs` | | |
 | **teardown** | end | `down.sh` | | |
@@ -95,6 +95,8 @@ node scripts/verify-clear.mjs --alert=BooklogrApiLatencyP99High --sustain=360 --
 1. Container check (`sreforge-runner` container must be running).
 2. Gitea API registration authority (`GET /api/v1/admin/actions/runners` using `GITEA_ADMIN_USER`/`GITEA_ADMIN_PASSWORD` from `.env`); passes only if at least one runner is `online` and `disabled !== true`.
 3. Log matching fallback (`declare successfully` / `runner registered successfully` in container logs) used only when the Gitea API is unreachable, emitting a non-authoritative warning. Exit code is `86` if not running or unregistered.
+
+`preflight-agy.sh` runs fast preflight checks before the agy agent driver launches (srt on PATH and runnable, agy auth/quota, WSL NAT mode, and provider resolvable). Supports `--skip-probe` to bypass the live agy model probe (used in `doctor.mjs`).
 
 
 ## When use-cases multiply

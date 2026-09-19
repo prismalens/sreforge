@@ -43,8 +43,8 @@
     "test:confirm-runner": "node --test use-cases/booklogr/stacks/flask-compose/scripts/test/confirm-runner.test.mjs"
   },
   "devDependencies": {
-    "@go-task/cli": "^3.52.0",
-    "@modelcontextprotocol/sdk": "^1.29.0"
+    "@go-task/cli": "^3.53.1",
+    "@modelcontextprotocol/sdk": "^1.30.0"
   },
   "pnpm": {
     "onlyBuiltDependencies": [

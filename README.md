@@ -141,3 +141,5 @@ the box), the read-only **MCP telemetry seam** + provider run-selection
 (ADR-0023), the **operator control dashboard** (ADR-0024), and the **automated
 alert-push trigger** — Alertmanager pushes the firing notification to the box and
 the agent self-starts (`pnpm forge auto <use-case>`, ADR-0025).
+
+<!-- live test, gh-workflows #183 #200: close, do not merge -->

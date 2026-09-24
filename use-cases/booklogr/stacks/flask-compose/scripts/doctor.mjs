@@ -1,4 +1,5 @@
 #!/usr/bin/env node
+import { spawnSync } from "node:child_process";
 import { existsSync, readFileSync } from "node:fs";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -90,7 +91,29 @@ const config = {
 		"refactor(api): normalize response status validation in fields route",
 };
 
-const checks = defineChecks(config);
+const checks = [
+	...defineChecks(config),
+	{
+		id: "agy-preflight",
+		plane: "agent",
+		run: async () => {
+			const res = spawnSync("bash", [resolve(HERE, "preflight-agy.sh"), "--skip-probe"], {
+				encoding: "utf8",
+			});
+			if (res.status === 0) {
+				return {
+					status: "pass",
+					detail: "agy driver preconditions ok (live agy probe not run here)",
+				};
+			}
+			return {
+				status: "warn",
+				detail: (res.stderr || res.stdout || "preflight-agy.sh failed").trim().split("\n")[0],
+				hint: "bash use-cases/booklogr/stacks/flask-compose/scripts/preflight-agy.sh",
+			};
+		},
+	},
+];
 
 async function main() {
 	const results = await runAllChecks(checks);

@@ -20,6 +20,7 @@ function run() {
         submitted: { type: "string" },
         "raw-text-file": { type: "string" },
         "raw-json-file": { type: "string" },
+        preflight: { type: "string" },
       },
       strict: true,
     });
@@ -56,6 +57,12 @@ function run() {
     process.exit(1);
   }
 
+  const expectedHarness = process.env.SREFORGE_EXPECTED_HARNESS;
+  if (expectedHarness && expectedHarness !== values.harness) {
+    console.error(`Harness mismatch: the run resolved to '${expectedHarness}' but this handoff claims '${values.harness}'. Refusing to write a mislabelled record.`);
+    process.exit(1);
+  }
+
   if (values.kind === "rca" && values["raw-json-file"]) {
     console.error("rca handoff requires --raw-text-file");
     process.exit(1);
@@ -77,6 +84,7 @@ function run() {
     harness: values.harness,
     session: values.session,
     confinement: values.confinement,
+    preflight: values.preflight === "ok" ? "ok" : "skipped",
     captured_at: new Date().toISOString(),
   };
 

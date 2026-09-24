@@ -58,7 +58,7 @@ tasks:
   arm:
     desc: "[run] reset to the regressed baseline, start the storm, confirm the alert fires"
     env:
-      SCENARIO_ID: '{{.SCENARIO_ID | default "latency-cache-stampede"}}'
+      SCENARIO_ID: '{{.SCENARIO_ID | default (env "SCENARIO_ID") | default "latency-cache-stampede"}}'
     cmds: [bash scripts/arm-incident.sh]
 
   # arm-regress / arm-fire: the two halves of `arm`, exposed so auto-incident.mjs
@@ -68,13 +68,13 @@ tasks:
   arm-regress:
     desc: "[run] arm phase 1: regress + bring the app up healthy, load quiesced (not firing)"
     env:
-      SCENARIO_ID: '{{.SCENARIO_ID | default "latency-cache-stampede"}}'
+      SCENARIO_ID: '{{.SCENARIO_ID | default (env "SCENARIO_ID") | default "latency-cache-stampede"}}'
     cmds: [bash scripts/arm-regress.sh]
 
   arm-fire:
     desc: "[run] arm phase 2: re-apply load + confirm the alert fires (assumes arm-regress ran)"
     env:
-      SCENARIO_ID: '{{.SCENARIO_ID | default "latency-cache-stampede"}}'
+      SCENARIO_ID: '{{.SCENARIO_ID | default (env "SCENARIO_ID") | default "latency-cache-stampede"}}'
     cmds: [bash scripts/arm-fire.sh]
 
   # ── agent (per run) ──────────────────────────────────────────────────────────
@@ -92,7 +92,7 @@ tasks:
       # Egress allowlist — set directly, or derived from PROVIDER below. EMPTY
       # (default, incl. PROVIDER=local) ⇒ zero external egress.
       EGRESS_ALLOWLIST: '{{.EGRESS_ALLOWLIST | default ""}}'
-      PROVIDER: '{{.PROVIDER | default ""}}'
+      PROVIDER: '{{.PROVIDER | default (env "PROVIDER")}}'
       MCP: '{{.MCP | default ""}}'
     cmds:
       - |
@@ -171,12 +171,13 @@ tasks:
       RUN_ID: '{{.id | default ""}}'
     env:
       RUN_ID: '{{.RUN_ID}}'
-      PROVIDER: '{{.PROVIDER | default ""}}'
+      PROVIDER: '{{.PROVIDER | default (env "PROVIDER")}}'
       MCP: '{{.MCP | default ""}}'
       EGRESS_ALLOWLIST: '{{.EGRESS_ALLOWLIST | default ""}}'
-      AGENT_CMD: '{{.AGENT_CMD | default ""}}'
+      AGENT_CMD: '{{.AGENT_CMD | default (env "AGENT_CMD")}}'
+      AGY_MODEL: '{{.AGY_MODEL | default (env "AGY_MODEL")}}'
       WEBHOOK_TIMEOUT_S: '{{.WEBHOOK_TIMEOUT_S | default ""}}'
-      SCENARIO_ID: '{{.SCENARIO_ID | default "latency-cache-stampede"}}'
+      SCENARIO_ID: '{{.SCENARIO_ID | default (env "SCENARIO_ID") | default "latency-cache-stampede"}}'
     cmds:
       - node scripts/auto-incident.mjs
 
@@ -196,8 +197,9 @@ tasks:
     vars:
       RUN_ID: '{{.id | default ""}}'
     env:
-      RUNNER: '{{.RUNNER | default "scripted"}}'
-      SCENARIO_ID: '{{.SCENARIO_ID | default "latency-cache-stampede"}}'
+      RUNNER: '{{.RUNNER | default (env "RUNNER") | default "scripted"}}'
+      AGENT_MODE: '{{.AGENT_MODE | default (env "AGENT_MODE")}}'
+      SCENARIO_ID: '{{.SCENARIO_ID | default (env "SCENARIO_ID") | default "latency-cache-stampede"}}'
       # lib-scenario.sh needs STACK to resolve scenarios/<id>/scenario.env.
       # Every other caller derives it from BASH_SOURCE before sourcing the
       # lib, but go-task's sh (mvdan/sh) gives this inline cmd no
@@ -279,7 +281,7 @@ tasks:
   quiesce:
     desc: "[run] quiesce the observability plane before arm (stop load, wipe carryover, warm-up, assert 0 firing/pending)"
     env:
-      SCENARIO_ID: '{{.SCENARIO_ID | default "latency-cache-stampede"}}'
+      SCENARIO_ID: '{{.SCENARIO_ID | default (env "SCENARIO_ID") | default "latency-cache-stampede"}}'
     cmds: [bash scripts/quiesce.sh]
 
   status:
@@ -299,7 +301,7 @@ tasks:
   smoke:
     desc: "run both smoke checks (positive then negative)"
     env:
-      SCENARIO_ID: '{{.SCENARIO_ID | default "latency-cache-stampede"}}'
+      SCENARIO_ID: '{{.SCENARIO_ID | default (env "SCENARIO_ID") | default "latency-cache-stampede"}}'
     cmds:
       - task: smoke:positive
         vars:
@@ -310,12 +312,12 @@ tasks:
   smoke:positive:
     desc: "arm + reference fix → assert verdict passed"
     env:
-      SCENARIO_ID: '{{.SCENARIO_ID | default "latency-cache-stampede"}}'
+      SCENARIO_ID: '{{.SCENARIO_ID | default (env "SCENARIO_ID") | default "latency-cache-stampede"}}'
     cmds: [bash scripts/smoke-positive.sh]
   smoke:negative:
     desc: "arm + no-op fix → assert anti-cheat holds (not passed)"
     env:
-      SCENARIO_ID: '{{.SCENARIO_ID | default "latency-cache-stampede"}}'
+      SCENARIO_ID: '{{.SCENARIO_ID | default (env "SCENARIO_ID") | default "latency-cache-stampede"}}'
     cmds: [bash scripts/smoke-negative.sh]
 
   # ── teardown ─────────────────────────────────────────────────────────────────

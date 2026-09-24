@@ -1,0 +1,3 @@
+review:
+  # CodeRabbit reviews every PR through the hourly review queue; this lane stays off (Sumit1993/rig#150).
+  admission: off

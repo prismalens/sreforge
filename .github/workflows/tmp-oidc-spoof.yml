@@ -20,8 +20,9 @@ jobs:
           TOKEN="$(curl -sS -H "Authorization: bearer ${ACTIONS_ID_TOKEN_REQUEST_TOKEN}" "${ACTIONS_ID_TOKEN_REQUEST_URL}&audience=${ORIGIN}" | jq -r .value)"
           echo "::add-mask::${TOKEN}"
           fail=0
-          for path in /ingest /ingest/health /pr-state; do
-            code="$(curl -sS -o body.txt -w '%{http_code}' -X POST "${ORIGIN}${path}" -H "Authorization: Bearer ${TOKEN}" -H 'content-type: application/json' -d '{"repository":"prismalens/prismalens","pr_number":1}')"
+          BODY='{"repository":"prismalens/prismalens","session_id":"spoof-test-2026-09-24","pr_number":1}'
+          for path in /ingest /ingest/health /pr-state /ingest/findings; do
+            code="$(curl -sS -o body.txt -w '%{http_code}' -X POST "${ORIGIN}${path}" -H "Authorization: Bearer ${TOKEN}" -H 'content-type: application/json' -d "$BODY")"
             echo "${path} -> ${code} $(cat body.txt)" | tee -a "$GITHUB_STEP_SUMMARY"
             [ "$code" = 403 ] || fail=1
           done

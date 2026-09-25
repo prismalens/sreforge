@@ -1,26 +1,10 @@
 reviews:
   profile: chill
-  # Rate-limit discipline. This repo is on CodeRabbit's OSS tier: 1-10 PR reviews per
-  # developer per hour, scaling with project popularity — a young repo sits near the
-  # bottom. EVERY review run spends one, including the automatic incremental review
-  # after each push, so a fix-push loop drains the whole budget on a single PR.
-  # Pausing after 1 reviewed commit means one review per PR; push your fixes as a batch,
-  # then re-request explicitly with an `@coderabbitai review` comment.
-  # Label-gated admission. `enabled: false` turns OFF unconditional automatic
-  # review; `labels` re-admits exactly the PRs carrying `coderabbit_review`. Together
-  # they make an online review something a PR is ADMITTED to, not something every
-  # PR spends budget on. Unlabelled PRs get a "Review skipped" comment instead.
-  #
-  # Safe only because `review-evidence` is already a REQUIRED check on main
-  # (ruleset 18200324). That ordering is load-bearing: with the gate required
-  # first, an unreviewed PR is a BLOCKED merge. Flipped the other way round,
-  # "unreviewed" would silently become the default and nothing would say so.
-  #
-  # Evidence for a PR that is never admitted comes from a local CodeRabbit CLI
-  # review, which posts a head-SHA-keyed marker the gate accepts.
-  #
-  # Revert: ~/ai-context/state/sreforge-valve-revert.md (written before this
-  # merged, pinned to pre-flip commit dbca60bf). Tracked in prismalens/prismalens#301.
+  # Admission (Sumit1993/rig#150): automatic review is off. The hourly `CodeRabbit summoner`
+  # routine (Sumit1993/rig scripts/coderabbit-routine) summons one PR per hour across every repo,
+  # because the allowance is one review per developer per hour. Sessions never summon by hand:
+  # fix, push once, reply in each thread, and the routine re-reviews. `coderabbit_review` is the
+  # operator's override for a review now. Pausing after 1 reviewed commit keeps one review per head.
   auto_review:
     enabled: false
     labels:

@@ -42,5 +42,4 @@ is not tuned to any one endpoint.
 python3 apply.py <substrate-checkout-dir>
 ```
 
-Invoked by `scripts/import-substrate.sh` against the working checkout before it
-is committed and pushed to the local Gitea forge.
+Invoked by `scripts/setup.sh` against the fresh checkout before the `healthy` branch is cut.

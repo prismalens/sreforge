@@ -29,13 +29,7 @@ the hub. Capture the reusable *insight + procedure + pointers*, never a copy.
 run them.
 <!-- END mage -->
 
-## Scenario and Observability Authoring
+## Scenarios and alert rules
 
-Every Prometheus/Alertmanager alert rule under `observability/rules/*.yml` MUST carry a `service` label; enforced offline by `pnpm rules-lint` (CI-required). `no_new_alerts` grading is scoped by `service`; an unlabelled rule silently escapes regression counting.
-
-## Run records — the public/private boundary
-
-Only **pruned** run records (metadata, verdict, timings, and a `full_record_sha256` pointer) may be committed to this public repo. **Full**, transcript-bearing records go to the private `sreforge-runs` store via `pnpm runs:bank` and are referenced from here only by hash — ADR-0026 §7.
-
-`records/` is deliberately **not** gitignored, because pruned records are meant to be committed. The guard is `pnpm record-lint` (CI-required), which fails if any git-tracked record under `use-cases/` carries transcript content. It shares one predicate — `tools/record/is-full-record.mjs` — with `bank.mjs`, so the store and the repo can never disagree about what "full" means. Records left untracked in a working tree are the normal pre-banking state and are not in scope.
-
+Every alert rule under `observability/rules/*.yml` carries a `service` label; `pnpm rules-lint` enforces it in CI.
+A scenario is a folder under `use-cases/booklogr/scenarios/` with a `fault.env`; `scripts/fault.sh` is the only thing that reads it.

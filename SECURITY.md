@@ -2,7 +2,7 @@
 
 ## Supported versions
 
-SREForge is pre-1.0 and ships from a single line of development on `main`.
+sreforge is pre-1.0 and ships from a single line of development on `main`.
 Security fixes land on `main` (and the latest tagged release); there are no
 maintained release branches.
 
@@ -39,16 +39,13 @@ Do **not** include real secrets, tokens, or private content in your report.
 
 ## Scope notes
 
-SREForge is a contamination-controlled evaluation harness for autonomous
-SWE/SRE agents. It runs on a local container substrate and is operated by a
-human. It deliberately:
+sreforge is a local docker compose environment operated by a human. It
+deliberately:
 
-- keeps secrets and tokens out of the repository — `.env` and the imported
-  `substrate/` checkout are gitignored and never committed;
-- separates the harness from the substrate it evaluates, so the harness is not
-  exposed to the code under test;
+- keeps secrets out of the repository: `.secrets/` (the prismalens webhook
+  token) and the `substrate/` checkout are gitignored and never committed;
+- serves its dashboard on 127.0.0.1 only;
 - pins dependencies via lockfiles, watched by Dependabot.
 
-Reports that strengthen those guarantees — for example a path that leaks a
-secret into tracked files, or an escape from the agent workspace into the
-harness — are especially valuable.
+Reports that strengthen those guarantees, for example a path that leaks the
+webhook token into tracked files, are especially valuable.

@@ -17,33 +17,7 @@ reviews:
   path_filters:
     - "!pnpm-lock.yaml"
   path_instructions:
-    # 1. Docs-drift rule
-    - path: "tools/**"
-      instructions: "If this PR changes a CLI verb, flag, env var, task name, file layout, prompt surface, or operator workflow, the PR must update the documentation surface that describes the changed behavior — an unrelated docs/ or README change does NOT satisfy the rule; when the relevant surface is not updated, flag it as a documentation gap and name the specific stale surface (docs/src/content/docs/reference/cli.md verb table, run-contract.md, drive-an-agent.mdx, or the nearest README)."
-    - path: "use-cases/**/scripts/**"
-      instructions: "If this PR changes a CLI verb, flag, env var, task name, file layout, prompt surface, or operator workflow, the PR must update the documentation surface that describes the changed behavior — an unrelated docs/ or README change does NOT satisfy the rule; when the relevant surface is not updated, flag it as a documentation gap and name the specific stale surface (docs/src/content/docs/reference/cli.md verb table, run-contract.md, drive-an-agent.mdx, or the nearest README)."
-    - path: "use-cases/**/Taskfile.yml"
-      instructions: "If this PR changes a CLI verb, flag, env var, task name, file layout, prompt surface, or operator workflow, the PR must update the documentation surface that describes the changed behavior — an unrelated docs/ or README change does NOT satisfy the rule; when the relevant surface is not updated, flag it as a documentation gap and name the specific stale surface (docs/src/content/docs/reference/cli.md verb table, run-contract.md, drive-an-agent.mdx, or the nearest README)."
-    - path: "infra/**"
-      instructions: "If this PR changes a CLI verb, flag, env var, task name, file layout, prompt surface, or operator workflow, the PR must update the documentation surface that describes the changed behavior — an unrelated docs/ or README change does NOT satisfy the rule; when the relevant surface is not updated, flag it as a documentation gap and name the specific stale surface (docs/src/content/docs/reference/cli.md verb table, run-contract.md, drive-an-agent.mdx, or the nearest README)."
-    - path: "core/src/**"
-      instructions: "If this PR changes a CLI verb, flag, env var, task name, file layout, prompt surface, or operator workflow, the PR must update the documentation surface that describes the changed behavior — an unrelated docs/ or README change does NOT satisfy the rule; when the relevant surface is not updated, flag it as a documentation gap and name the specific stale surface (docs/src/content/docs/reference/cli.md verb table, run-contract.md, drive-an-agent.mdx, or the nearest README)."
-    # 2. Never-fatal capture
-    - path: "core/src/record/**"
-      instructions: "Artifact capture (transcript, RCA) is best-effort by invariant (ADR-0027 §9): a capture failure must never abort submission, the sentinel write, or record.json. Flag any change that makes capture fatal — and do NOT propose making it fatal."
-    - path: "use-cases/**/scripts/agent-*.{sh,mjs}"
-      instructions: "Artifact capture (transcript, RCA) is best-effort by invariant (ADR-0027 §9): a capture failure must never abort submission, the sentinel write, or record.json. Flag any change that makes capture fatal — and do NOT propose making it fatal."
-    - path: "infra/agent-sandbox/**"
-      instructions: "Artifact capture (transcript, RCA) is best-effort by invariant (ADR-0027 §9): a capture failure must never abort submission, the sentinel write, or record.json. Flag any change that makes capture fatal — and do NOT propose making it fatal."
-    # 3. Use-case-agnostic libs
-    - path: "tools/doctor/lib.mjs"
-      instructions: "This library must stay use-case-agnostic (ADR-0001/0017): flag any hardcoded use-case value (e.g. booklogr names, stack paths) — they belong in the stack scripts' config."
-    - path: "tools/certify/lib/**"
-      instructions: "This library must stay use-case-agnostic (ADR-0001/0017): flag any hardcoded use-case value (e.g. booklogr names, stack paths) — they belong in the stack scripts' config."
-    # 4. Neutral agent-visible text
-    - path: "use-cases/**/scenarios/**"
-      instructions: "Agent-visible text must read as ordinary operations content — flag eval/harness/grading/oracle/benchmark language (ADR-0008)."
-    # 5. Alert rules service label
+    - path: "use-cases/**/{scripts/**,Taskfile.yml,compose/**}"
+      instructions: "If this PR changes a task name, flag, env var, port or file layout, the README must say so in the same PR; name the stale line if it does not."
     - path: "use-cases/**/observability/rules/**"
-      instructions: "Every alert rule in rules files MUST carry a `service` label (issue #76); `no_new_alerts` compound oracle grading is scoped by `service`. Flag any alert rule lacking a `service` label."
-
+      instructions: "Every alert rule MUST carry a `service` label (pnpm rules-lint enforces it). Flag any rule without one."

@@ -24,10 +24,7 @@ scrape_configs:
     static_configs:
       - targets: ['booklogr-api:9090']
 
-  # Self-hosted book-metadata provider (the stub). Harness observability exposed
-  # by prometheus_client on the provider's own port. Added by the
-  # worker-cpu-starvation scenario (ADR-0026 shared-surface addition); rules live
-  # in the separate observability/rules/book-metadata-rules.yml.
+  # The book-metadata stub's own metrics; its rules are in rules/book-metadata-rules.yml.
   - job_name: 'book-metadata'
     metrics_path: /metrics
     static_configs:

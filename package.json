@@ -2,49 +2,18 @@
   "name": "sreforge",
   "version": "0.0.2",
   "private": true,
-  "description": "SREForge — a contamination-controlled, event-triggered evaluation harness for autonomous SWE/SRE agents. core/ = the engine (built in v1); use-cases/booklogr/ = use-case #1. Knowledge base: external hub 'sreforge-kb', project 'sreforge'.",
+  "description": "A running environment for testing prismalens: booklogr, Prometheus and Alertmanager in docker compose, with faults you switch on.",
   "packageManager": "pnpm@10.32.1",
   "engines": {
     "node": ">=18"
   },
   "scripts": {
-    "test": "pnpm test:certify && pnpm test:rules-lint && pnpm test:record-lint && pnpm test:catalog && pnpm test:transcript && pnpm test:record-ci && pnpm test:runs-dashboard && pnpm test:sandbox-runtime && pnpm test:doctor && pnpm test:rca-judge && pnpm test:headroom && pnpm test:trigger-bus && pnpm test:quiesce && pnpm test:confirm-runner",
-    "guard": "node tools/contamination-guard/scan.mjs",
-    "guard:strict": "node tools/contamination-guard/scan.mjs --strict",
-    "detell": "node tools/detell-judge/judge.mjs",
-    "detell:grade": "node tools/detell-judge/judge.mjs --grade",
-    "judge:rca": "node tools/rca-judge/judge.mjs",
-    "forge": "node tools/usecase.mjs",
-    "certify:hash": "node tools/certify/surface-hash.mjs",
-    "certify:validate": "node tools/certify/validate-manifest.mjs",
-    "test:certify": "node --test tools/certify/test/*.test.mjs",
+    "test": "node --test tools/rules-lint/test/*.test.mjs tools/rca-judge/test/*.test.mjs tools/dashboard/test/*.test.mjs",
     "rules-lint": "node tools/rules-lint/lint.mjs",
-    "test:rules-lint": "node --test tools/rules-lint/test/*.test.mjs",
-    "record-lint": "node tools/record-lint/lint.mjs",
-    "test:record-lint": "node --test tools/record-lint/test/*.test.mjs",
-    "catalog:gen": "node tools/catalog/generate.mjs",
-    "catalog:check": "node tools/catalog/generate.mjs --check",
-    "test:catalog": "node --test tools/catalog/test/*.test.mjs",
-    "test:transcript": "node --test tools/transcript/test/*.test.mjs",
-    "test:record": "node --test tools/record/test/*.test.mjs",
-    "test:bank": "node --test tools/record/test/bank.test.mjs",
-    "test:record-ci": "node --test tools/record/test/confinement-tiers-crosscheck.test.mjs tools/record/test/header-keys-crosscheck.test.mjs tools/record/test/migrate-run-records.test.mjs",
-    "runs:bank": "node tools/record/bank.mjs",
-    "runs:import": "node tools/record/bank.mjs --import-all",
-    "runs:dashboard": "node tools/runs-dashboard/server.mjs",
-    "test:runs-dashboard": "node --test tools/runs-dashboard/test/*.test.mjs",
-    "test:sandbox-runtime": "node --test infra/agent-sandbox/runtime/test/agent-loop.test.mjs",
-    "test:doctor": "node --test tools/doctor/test/*.test.mjs",
-    "test:rca-judge": "node --test tools/rca-judge/test/*.test.mjs",
-    "headroom": "node tools/headroom/campaign.mjs",
-    "test:headroom": "node --test tools/headroom/test/*.test.mjs",
-    "test:trigger-bus": "node --test core/test/trigger-bus.test.mjs core/test/t0-bundle.test.mjs use-cases/booklogr/stacks/flask-compose/scripts/test/lib-storm.test.mjs",
-    "test:quiesce": "node --test use-cases/booklogr/stacks/flask-compose/scripts/test/confirm-quiesced.test.mjs",
-    "test:confirm-runner": "node --test use-cases/booklogr/stacks/flask-compose/scripts/test/confirm-runner.test.mjs"
+    "judge:rca": "node tools/rca-judge/judge.mjs"
   },
   "devDependencies": {
-    "@go-task/cli": "^3.53.1",
-    "@modelcontextprotocol/sdk": "^1.30.0"
+    "@go-task/cli": "^3.53.1"
   },
   "pnpm": {
     "onlyBuiltDependencies": [

@@ -1,5 +1,5 @@
 <!--
-Thanks for contributing to SREForge! main is protected: every change lands via a
+Thanks for contributing to sreforge! main is protected: every change lands via a
 pull request with green CI. Keep PRs focused and small where you can.
 -->
 

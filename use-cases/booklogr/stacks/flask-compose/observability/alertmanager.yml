@@ -1,9 +1,4 @@
-# Alertmanager config for booklogr.
-# Firing alerts are ROUTED to the on-call responder's box: the `oncall` webhook
-# receiver posts the (symptom-level) notification to http://oncall:8080/ — the
-# automated trigger (ADR-0025). The responder can equally self-serve the same
-# data from this API. When no on-call box is up (manual runs, idle stack) the
-# delivery fails and Alertmanager retries/logs — operator-side noise only.
+# Every alert goes to prismalens. scripts/up.sh writes the URL and bearer token into ../.secrets/.
 global:
   resolve_timeout: 1m
 
@@ -11,16 +6,15 @@ route:
   group_by: ['alertname', 'service']
   group_wait: 5s
   group_interval: 10s
-  # Re-page an UNCHANGED still-firing group every 5m (a realistic pager
-  # cadence). Also what makes same-session repeat cycles self-trigger: an
-  # incident that never resolved between runs is a "no state change" group, so
-  # with a long repeat_interval Alertmanager would stay silent for the whole
-  # interval and a re-armed run would get NO webhook (the in-box listener
-  # times out at 420s). 5m keeps the re-page inside that window.
   repeat_interval: 5m
-  receiver: 'oncall'
+  receiver: prismalens
 
 receivers:
-  - name: 'oncall'
+  - name: prismalens
     webhook_configs:
-      - url: 'http://oncall:8080/'
+      - url_file: /etc/alertmanager/secrets/prismalens-url
+        send_resolved: true
+        http_config:
+          authorization:
+            type: Bearer
+            credentials_file: /etc/alertmanager/secrets/prismalens-token

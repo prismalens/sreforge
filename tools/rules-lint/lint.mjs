@@ -2,39 +2,18 @@
 // =============================================================================
 // lint.mjs — issue #76: verify all Prometheus alert rules carry a `service` label.
 //
-// Rationale: `no_new_alerts` in the compound oracle is scoped by the alert's `service`
-// label (PR #71). An alert rule missing a `service` label silently escapes
-// regression counting (fail-open). This offline lint asserts every rule in
-// `observability/rules/*.yml` AND `furniture/*.yml` carries a nested `service`
-// label, plus two ambient invariants (#121) — see AMBIENT_SERVICE below.
+// Every alert rule in `observability/rules/*.yml` must carry a nested `service` label:
+// alert grouping and anything scoped by service depend on it.
 //
 // Usage:
 //   node tools/rules-lint/lint.mjs [<file|glob> ...]
 // Exit 0 = all valid; 1 = missing label(s); 2 = usage/parse error.
 // =============================================================================
 import { existsSync, readdirSync, readFileSync, statSync } from "node:fs";
-import { dirname, join, relative, resolve } from "node:path";
-import { fileURLToPath } from "node:url";
+import { join } from "node:path";
 
-const __dirname = dirname(fileURLToPath(import.meta.url));
-const REPO_ROOT = resolve(__dirname, "../..");
-
-// One definition, used by BOTH ambient invariants below. They are a matched pair —
-// the forward check ("ambient rules carry role: ambient") and the reverse check
-// ("non-ambient rules don't claim it") must agree on which service is ambient. Two
-// independent literals meant renaming the ambient service silently disabled the
-// forward check while making the reverse check start rejecting legitimate new
-// furniture, which pressures an author into dropping the label the gate needs.
-export const AMBIENT_SERVICE = "edge-client";
-
-// Both the SERVED rules dir and the FURNITURE dir. arm-regress.sh installs
-// furniture/ambient-rules.yml over observability/rules/ambient-rules.yml on every
-// arm, so linting only the served copy checks a file that any arm overwrites — a
-// label required by the quiesce gate (#121) would survive exactly one run. The
-// authoritative source has to be in scope or the guard is theatre.
 export const DEFAULT_TARGETS = [
 	"use-cases/booklogr/stacks/flask-compose/observability/rules/*.yml",
-	"use-cases/booklogr/stacks/flask-compose/furniture/*.yml",
 ];
 
 function isValidServiceValue(rawVal) {
@@ -238,190 +217,6 @@ export function resolveTargets(patterns) {
  * @param {string} ambientService
  * @returns {{count: number, errors: string[]}}
  */
-export function checkUnscopedAmbientService(
-	scenariosDir = "use-cases/booklogr/scenarios",
-	ambientService = AMBIENT_SERVICE,
-) {
-	const resolvedDir = resolve(REPO_ROOT, scenariosDir);
-	const errors = [];
-	if (!existsSync(resolvedDir)) return { count: 0, errors };
-
-	const entries = readdirSync(resolvedDir, { withFileTypes: true });
-	let count = 0;
-	for (const entry of entries) {
-		if (!entry.isDirectory()) continue;
-		const manifestPath = join(resolvedDir, entry.name, "scenario.toml");
-		if (!existsSync(manifestPath)) continue;
-		count++;
-		const content = readFileSync(manifestPath, "utf8");
-		// NOTE: deliberately no `m` flag, and the section header is consumed by
-		// `[^\n]*\n` rather than `\s*`. With `/m`, `$` matches at every line end and
-		// the lazy capture terminated after the FIRST key line of the block — so this
-		// invariant silently inspected only `oracle = "..."` and passed everything
-		// else, including a scenario that really did declare the ambient service. It
-		// printed "Invariant passed" while checking nothing. Same trap, same fix, and
-		// now the same regex as confirm-quiesced.mjs and tools/headroom/campaign.mjs.
-		const verifyMatch = content.match(
-			/(?:^|\n)\[verify\][^\n]*\n([\s\S]*?)(?=\n\[|$)/,
-		);
-		if (verifyMatch) {
-			const verifyContent = verifyMatch[1];
-			const servicesMatch = verifyContent.match(/services\s*=\s*\[(.*?)\]/s);
-			if (servicesMatch) {
-				const servicesStr = servicesMatch[1];
-				if (
-					servicesStr.includes(`"${ambientService}"`) ||
-					servicesStr.includes(`'${ambientService}'`)
-				) {
-					errors.push(
-						`Scenario '${entry.name}' includes ambient service '${ambientService}' in verify.services`,
-					);
-				}
-			}
-		}
-	}
-	return { count, errors };
-}
-
-/**
- * Extract the `service` and `role` label values for every alert rule in a rules file.
- * Same line-oriented, labels-block-scoped parse as lintContent — no YAML dependency.
- * @param {string} content - YAML content
- * @param {string} file - Filename/path (for error reporting)
- * @returns {Array<{alert: string, line: number, service: string|null, role: string|null}>}
- */
-export function extractAlertLabels(content, file = "") {
-	const lines = content.split(/\r?\n/);
-	const out = [];
-	let cur = null;
-
-	const finalize = () => {
-		if (cur) out.push(cur);
-		cur = null;
-	};
-
-	for (let i = 0; i < lines.length; i++) {
-		const line = lines[i];
-		if (/^\s*#/.test(line) || /^\s*$/.test(line)) continue;
-
-		if (/^\s*-\s*name:/.test(line)) {
-			finalize();
-			continue;
-		}
-
-		const alertMatch = line.match(/^(\s*)-\s*alert:\s*(\S.*?)\s*$/);
-		if (alertMatch) {
-			finalize();
-			let name = alertMatch[2].trim();
-			if (
-				(name.startsWith('"') && name.endsWith('"')) ||
-				(name.startsWith("'") && name.endsWith("'"))
-			) {
-				name = name.slice(1, -1);
-			}
-			cur = {
-				file,
-				alert: name,
-				line: i + 1,
-				service: null,
-				role: null,
-				indent: alertMatch[1].length,
-				inLabels: false,
-				labelsIndent: null,
-			};
-			continue;
-		}
-
-		if (!cur) continue;
-
-		const lineIndent = (line.match(/^(\s*)/) || ["", ""])[1].length;
-		if (lineIndent <= cur.indent) {
-			finalize();
-			continue;
-		}
-
-		const bare = line.replace(/#.*$/, "").trimEnd();
-
-		if (cur.inLabels) {
-			if (lineIndent <= cur.labelsIndent) {
-				cur.inLabels = false;
-			} else {
-				const svc = bare.match(/^\s*service:\s*(.*)$/);
-				if (svc && isValidServiceValue(svc[1])) {
-					cur.service = svc[1].trim().replace(/^["']|["']$/g, "");
-				}
-				const role = bare.match(/^\s*role:\s*(.*)$/);
-				if (role?.[1]?.trim()) {
-					cur.role = role[1].trim().replace(/^["']|["']$/g, "");
-				}
-			}
-		}
-
-		if (!cur.inLabels && /^\s*labels:\s*$/.test(bare)) {
-			cur.inLabels = true;
-			cur.labelsIndent = lineIndent;
-		}
-	}
-
-	finalize();
-	return out.map(({ alert, line, service, role }) => ({
-		file,
-		alert,
-		line,
-		service,
-		role,
-	}));
-}
-
-/**
- * Check that `role: ambient` and the ambient service agree with each other (#121).
- *
- * `confirm-quiesced` exempts alerts labelled `role: ambient` from its firing/pending
- * assertion. That exemption is only safe if the label means exactly one thing, so this
- * enforces the equivalence in BOTH directions:
- *
- *   - a rule on the ambient service MUST carry `role: ambient` — otherwise new ambient
- *     furniture silently re-acquires the power to deadlock the quiesce gate, which is
- *     the #121 regression;
- *   - a rule NOT on the ambient service must NOT carry `role: ambient` — otherwise a
- *     real scenario signal can quietly opt itself out of the gate, which would let a
- *     run arm on a genuinely dirty plane.
- *
- * @param {string[]} filePaths
- * @param {string} ambientService
- * @returns {{count: number, errors: string[]}}
- */
-export function checkAmbientRoleConsistency(
-	filePaths = [],
-	ambientService = AMBIENT_SERVICE,
-) {
-	const errors = [];
-	let count = 0;
-
-	for (const filePath of filePaths) {
-		if (!existsSync(filePath)) continue;
-		const rel = relative(REPO_ROOT, filePath) || filePath;
-		for (const a of extractAlertLabels(readFileSync(filePath, "utf8"), rel)) {
-			const isAmbientService = a.service === ambientService;
-			const claimsAmbientRole = a.role === "ambient";
-			if (isAmbientService) count++;
-
-			if (isAmbientService && !claimsAmbientRole) {
-				errors.push(
-					`${rel}:${a.line} alert "${a.alert}" is on the ambient service '${ambientService}' but has no \`role: ambient\` label — confirm-quiesced would gate on it (#121)`,
-				);
-			}
-			if (!isAmbientService && claimsAmbientRole) {
-				errors.push(
-					`${rel}:${a.line} alert "${a.alert}" claims \`role: ambient\` but its service is '${a.service ?? "(none)"}', not '${ambientService}' — a scenario signal must not exempt itself from the quiesce gate (#121)`,
-				);
-			}
-		}
-	}
-
-	return { count, errors };
-}
-
 // ── CLI ──────────────────────────────────────────────────────────────────────
 if (import.meta.url === `file://${process.argv[1]}`) {
 	let rawArgs = process.argv.slice(2);
@@ -453,34 +248,6 @@ if (import.meta.url === `file://${process.argv[1]}`) {
 
 	const totalAlerts = stats.totalAlerts;
 	const totalFiles = filePaths.length;
-
-	const scenarioCheck = checkUnscopedAmbientService();
-	if (scenarioCheck.count > 0) {
-		console.log(
-			`[rules-lint] Checked ${scenarioCheck.count} scenario manifests.`,
-		);
-		if (scenarioCheck.errors.length > 0) {
-			for (const err of scenarioCheck.errors) {
-				console.error(`[rules-lint] FAIL: ${err}`);
-			}
-			process.exit(1);
-		} else {
-			console.log(
-				`[rules-lint] Invariant passed: ambient service '${AMBIENT_SERVICE}' is unscoped in all scenario verification targets.`,
-			);
-		}
-	}
-
-	const roleCheck = checkAmbientRoleConsistency(filePaths);
-	if (roleCheck.errors.length > 0) {
-		for (const err of roleCheck.errors) {
-			console.error(`[rules-lint] FAIL: ${err}`);
-		}
-		process.exit(1);
-	}
-	console.log(
-		`[rules-lint] Invariant passed: ${roleCheck.count} ambient rule(s) carry \`role: ambient\`, and no non-ambient rule claims it.`,
-	);
 
 	if (failures.length > 0) {
 		for (const f of failures) {

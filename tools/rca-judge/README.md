@@ -81,7 +81,7 @@ node tools/rca-judge/judge.mjs --judge --rca-file <path> --scenario <scenario-di
 - **Exit codes**:
   - `exit 2`: Contract violation (bad flags, missing/malformed oracle, unpinned model).
   - `exit 0`: Success (writes `diagnosis.json`), or best-effort model unreachable / timeout / unparseable output (writes no diagnosis; absent score is normal).
-- **Output shape**: Writes `diagnosis.json` with `schema_version: "diagnosis.v1"` (`tools/certify/schemas/diagnosis.v1.schema.json`).
+- **Output shape**: Writes `diagnosis.json` with `schema_version: "diagnosis.v1"`.
 - **Breaking changes**: `tools/rca-judge/test/contract.test.mjs` is the gate. Any change to flags, oracle resolution, exit codes, or schema version breaks prismalens.
 
 ## Env vars

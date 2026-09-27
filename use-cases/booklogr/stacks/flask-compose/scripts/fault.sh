@@ -31,7 +31,8 @@ fault_off() {
   git -C "$WORK" clean -fdq
   : > "$RUNTIME_ENV_FILE"
   echo "==> fresh database"
-  compose rm -sf booklogr-db >/dev/null
+  # Stop the api first: a live api on a vanished DB answers 500s and trips the error-rate alert.
+  compose rm -sf booklogr-api booklogr-db >/dev/null
   docker volume rm -f booklogr_pgdata >/dev/null
   compose up -d --build --force-recreate booklogr-db book-metadata booklogr-api
   wait_healthy
@@ -48,6 +49,9 @@ commit_change() { # N
     *) echo "unknown change type: $change" >&2; exit 1 ;;
   esac
   if [ "$date" = now ]; then ts="$(date +%s)"; else ts="$(date -d "$date" +%s)"; fi
+  # A child older than its parent is a visible giveaway; keep history in order.
+  local parent; parent="$(git -C "$WORK" log -1 --format=%ct)"
+  [ "$ts" -gt "$parent" ] || ts=$((parent + 3600))
   git -C "$WORK" add -A
   GIT_AUTHOR_NAME="$name" GIT_AUTHOR_EMAIL="$email" GIT_COMMITTER_NAME="$name" GIT_COMMITTER_EMAIL="$email" \
   GIT_AUTHOR_DATE="@$ts" GIT_COMMITTER_DATE="@$ts" git -C "$WORK" commit --quiet -m "$msg"

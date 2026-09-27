@@ -31,7 +31,8 @@ services:
     ports:
       - "5000:5000"
     environment:
-      DATABASE_URL: postgresql://booklogr:booklogrpass@booklogr-db:5432/booklogr
+      # Explicit driver: the Dockerfile's `pip install .` takes the newest SQLAlchemy, and 2.1 maps postgresql:// to psycopg 3.
+      DATABASE_URL: postgresql+psycopg2://booklogr:booklogrpass@booklogr-db:5432/booklogr
       SINGLE_USER_MODE: "true"
       AUTH_SECRET_KEY: ${AUTH_SECRET_KEY:-5f3a9c1e7b2d4860af91c6e0d83b27154e9a0f6c2b8d471e3a5c9072f1846bd0}
       AUTH_DEFAULT_USER: ${AUTH_DEFAULT_USER:-demo@booklogr.app}

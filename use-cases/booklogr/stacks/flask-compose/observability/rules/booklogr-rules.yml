@@ -41,10 +41,10 @@ groups:
       # Sanity — the scrape target is unreachable.
       - alert: BooklogrApiDown
         expr: up{job="booklogr-api"} == 0
-        for: 30s
+        for: 2m
         labels:
           severity: critical
           service: booklogr-api
         annotations:
           summary: "booklogr-api is down"
-          description: "Prometheus has been unable to scrape booklogr-api for 30s."
+          description: "Prometheus has been unable to scrape booklogr-api for 2 minutes."

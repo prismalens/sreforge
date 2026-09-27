@@ -7,7 +7,8 @@ STACK="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 WORK="$STACK/substrate/booklogr"
 META="$STACK/substrate/book-metadata"
 UPSTREAM="${UPSTREAM_REPO:-https://github.com/Mozzo1000/booklogr.git}"
-UPSTREAM_REF="${UPSTREAM_REF:-}"
+# The scenario patches and the index migration's down_revision assume this upstream base (2026-07-01).
+UPSTREAM_REF="${UPSTREAM_REF:-9e2d0abdc80deb4905d514d2e2e3930c91eb2f18}"
 mkdir -p "$STACK/substrate"
 
 commit() { # DIR NAME EMAIL DATE MESSAGE
@@ -19,7 +20,7 @@ commit() { # DIR NAME EMAIL DATE MESSAGE
 if ! git -C "$WORK" rev-parse --verify --quiet healthy >/dev/null 2>&1; then
   rm -rf "$WORK"
   git clone --quiet "$UPSTREAM" "$WORK"
-  [ -z "$UPSTREAM_REF" ] || git -C "$WORK" checkout --quiet "$UPSTREAM_REF"
+  git -C "$WORK" checkout --quiet -B main "$UPSTREAM_REF"
   git -C "$WORK" remote remove origin
   NAME="$(git -C "$WORK" log -1 --format=%an)"; EMAIL="$(git -C "$WORK" log -1 --format=%ae)"
 
@@ -29,11 +30,11 @@ if ! git -C "$WORK" rev-parse --verify --quiet healthy >/dev/null 2>&1; then
       sh -c 'pip install -q "poetry==1.8.5" && poetry lock --no-update' >/dev/null 2>&1 \
       || echo "warning: poetry lock regen failed; the lockfile may be stale"
   fi
-  commit "$WORK" "$NAME" "$EMAIL" "2026-06-09 09:47:18 +0200" "Add Prometheus metrics (prometheus-flask-exporter, multiprocess mode)"
+  commit "$WORK" "$NAME" "$EMAIL" "$(date -d '21 days ago 09:47' -R)" "Add Prometheus metrics (prometheus-flask-exporter, multiprocess mode)"
 
   mkdir -p "$WORK/migrations/versions"
   cp "$STACK"/instrumentation/schema/versions/*_add_books_owner_title_index.py "$WORK/migrations/versions/"
-  commit "$WORK" "$NAME" "$EMAIL" "2026-06-10 09:12:41 +0200" "Add owner/title index to books table"
+  commit "$WORK" "$NAME" "$EMAIL" "$(date -d '20 days ago 09:12' -R)" "Add owner/title index to books table"
 
   git -C "$WORK" branch -f healthy HEAD
   git -C "$WORK" checkout --quiet -B main healthy
@@ -44,7 +45,7 @@ if ! git -C "$META" rev-parse --verify --quiet HEAD >/dev/null 2>&1; then
   mkdir -p "$META"
   cp "$STACK"/stub/* "$META/"
   git -C "$META" init --quiet -b main
-  commit "$META" "Andreas Backström" "mozzo242@gmail.com" "2026-06-08 16:20:05 +0200" "Book metadata service"
+  commit "$META" "Andreas Backström" "mozzo242@gmail.com" "$(date -d '60 days ago 16:20' -R)" "Book metadata service"
 fi
 
 echo "code ready: $WORK ($(git -C "$WORK" rev-parse --short healthy) healthy), $META"

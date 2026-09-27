@@ -18,6 +18,8 @@ pnpm exec task dashboard                           # the same controls on http:/
 
 One fault is on at a time. Turning one on turns the current one off first.
 
+Every booklogr scenario fires the same `BooklogrApiLatencyP99High{service="booklogr-api"}`, so back to back they look like one alert refiring. An agent that dedupes refires (prismalens reopens an alert that refires within 15 minutes) folds them into the previous incident. Leave a gap longer than the agent's window after the alert clears.
+
 ## What runs
 
 | Service | Where |
@@ -39,7 +41,9 @@ An agent under test gets what a real one gets: the alert, the code, and the tele
 | `AGENT_WEBHOOK_URL` | `http://host.docker.internal:3001/api/webhooks/prometheus` (prismalens `pl up`) |
 | `AGENT_WEBHOOK_TOKEN`, or `AGENT_WEBHOOK_TOKEN_FILE` | none; sent as `Authorization: Bearer <token>` |
 
-`task status` shows Alertmanager's own count of webhook deliveries sent and failed.
+`task status` shows Alertmanager's own count of webhook deliveries sent and failed. If `failed` climbs, `docker logs booklogr-alertmanager` says why.
+
+On Rancher Desktop under WSL, `host.docker.internal` reaches Rancher's own VM, not your distro (connection refused). Use the Windows host address Rancher exposes instead: `docker run --rm alpine getent hosts host.rancher-desktop.internal`, then an IP URL such as `http://192.168.127.254:3170/...`.
 
 **Code.** Each alert carries a `service` label, and each service has its own git repo, outside sreforge. Register each one with the agent by this folder, never by a folder inside sreforge, whose top level holds every scenario's answer:
 

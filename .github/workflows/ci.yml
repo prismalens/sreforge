@@ -37,7 +37,7 @@ jobs:
         run: |
           touch compose/.env && mkdir -p .secrets
           docker compose -f compose/docker-compose.yml --profile load config --quiet
-          printf 'http://example.invalid/' > .secrets/prismalens-url && printf 'x' > .secrets/prismalens-token
+          printf 'http://example.invalid/' > .secrets/webhook-url && printf 'x' > .secrets/webhook-token
           docker run --rm --entrypoint amtool -v "$PWD/observability:/c:ro" -v "$PWD/.secrets:/etc/alertmanager/secrets:ro" \
             prom/alertmanager:v0.28.0 check-config /c/alertmanager.yml
 

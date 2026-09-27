@@ -42,7 +42,7 @@ Do **not** include real secrets, tokens, or private content in your report.
 sreforge is a local docker compose environment operated by a human. It
 deliberately:
 
-- keeps secrets out of the repository: `.secrets/` (the prismalens webhook
+- keeps secrets out of the repository: `.secrets/` (the agent webhook
   token) and the `substrate/` checkout are gitignored and never committed;
 - serves its dashboard on 127.0.0.1 only;
 - pins dependencies via lockfiles, watched by Dependabot.

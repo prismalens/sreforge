@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>sreforge</title>
-<!-- One page for the env: start the stack, switch a fault on, watch the alert reach prismalens. -->
+<!-- One page for the env: start the stack, switch a fault on, watch the alert reach the agent under test. -->
 <style>
   :root {
     --bg: #f6f5f2; --panel: #ffffff; --line: #e4e2dc; --line-soft: #efede8;
@@ -112,6 +112,7 @@
   .links a:hover { border-color: var(--accent); text-decoration: none; }
   .links a span { color: var(--ink-3); font-family: var(--mono); font-size: 11.5px; }
   .copyrow { display: flex; align-items: center; gap: 8px; }
+  .coderow + .coderow { margin-top: 10px; }
   .copyrow code { flex: 1; min-width: 0; overflow-wrap: anywhere; background: var(--line-soft); border-radius: 6px; padding: 5px 8px; }
   .explain { color: var(--ink-3); font-size: 12px; margin-top: 3px; }
 
@@ -148,7 +149,7 @@
   <header>
     <div>
       <h1>sreforge</h1>
-      <p class="lede">A test environment for prismalens. Bring the stack up, switch on a fault, and a real alert fires and reaches prismalens through Alertmanager.</p>
+      <p class="lede">A test environment for SRE agents such as prismalens. Bring the stack up, switch on a fault, and a real alert fires and reaches the agent through Alertmanager.</p>
     </div>
     <div class="updated"><span class="dot" id="live"></span><span id="updated">connecting…</span></div>
   </header>
@@ -241,7 +242,7 @@ function renderFlow(s) {
   const st = stackState(s.stack);
   const fault = s.fault && s.scenarios.find((x) => x.id === s.fault.scenario);
   const firing = s.alerts.filter((a) => a.state === "firing");
-  const pl = { sent: 0, failed: 0, ...s.prismalens };
+  const pl = { sent: 0, failed: 0, ...s.receiver };
   const step = (n, key, dot, value, sub, hot) =>
     h("div", { class: `step${hot ? " hot" : ""}` },
       h("div", { class: "k" }, h("span", { class: `dot ${dot}` }), `${n} · ${key}`),
@@ -252,7 +253,7 @@ function renderFlow(s) {
     step(2, "Fault", fault ? "bad" : "", fault ? fault.title : "None", fault ? since(s.fault.since, "on for ") : "the app is healthy", !!fault),
     step(3, "Alert", firing.length ? "bad pulse" : "", firing.length ? `${firing.length} firing` : "Quiet",
       firing.length ? firing.map((a) => a.name).join(", ") : "no alerts firing", firing.length > 0),
-    step(4, "prismalens", pl.failed ? "bad" : pl.sent ? "ok" : "",
+    step(4, "Agent", pl.failed ? "bad" : pl.sent ? "ok" : "",
       pl.failed ? "Delivery failing" : pl.sent ? "Received" : "Nothing sent yet",
       `${pl.sent} sent · ${pl.failed} failed (Alertmanager's count)`),
   );
@@ -318,18 +319,23 @@ function copyRow(text) {
 
 function renderWhere(s) {
   const links = Object.entries(s.links || {});
-  const [sha, ...msg] = (s.substrate?.head || "").split(" ");
+  const code = (s.code || []).map((c) => {
+    const [sha, ...msg] = (c.head || "").split(" ");
+    return h("div", { class: "coderow" },
+      h("div", { class: "explain" }, h("b", {}, c.service)),
+      copyRow(c.path),
+      h("div", { class: "explain" }, sha ? h("span", {}, "HEAD ", h("code", {}, sha), " ", msg.join(" ")) : "not set up yet"));
+  });
   $("where").replaceChildren(
     h("dt", {}, "Open"),
     h("dd", {}, h("div", { class: "links" }, links.map(([k, url]) =>
       h("a", { href: url, target: "_blank", rel: "noopener" }, LINK_NAMES[k] || k, h("span", {}, url.replace(/^https?:\/\/(localhost)?/, "")))))),
-    h("dt", {}, "Code under investigation"),
-    h("dd", {}, copyRow(s.substrate?.path || "unknown"),
-      h("div", { class: "explain" }, sha ? h("span", {}, "HEAD ", h("code", {}, sha), " ", msg.join(" ")) : "no commit"),
-      h("div", { class: "explain" }, "The booklogr checkout prismalens reads when it investigates.")),
-    h("dt", {}, "prismalens webhook"),
-    h("dd", {}, copyRow(s.prismalens?.webhook || "not configured"),
-      h("div", { class: "explain" }, "Where Alertmanager posts firing alerts.")),
+    h("dt", {}, "Code, by alert service label"),
+    h("dd", {}, ...code,
+      h("div", { class: "explain" }, "Register each service with the agent under this folder, never a folder inside sreforge.")),
+    h("dt", {}, "Agent webhook"),
+    h("dd", {}, copyRow(s.receiver?.url || "not configured"),
+      h("div", { class: "explain" }, "Where Alertmanager posts every alert.")),
   );
 }
 

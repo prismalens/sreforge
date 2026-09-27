@@ -17,7 +17,7 @@ Commits on top of `healthy`, newest last:
 
 - "Disable response caching" by Andreas Backström, dated 2026-06-11 10:34:52 +0200 (`inject/disable-cache.sh`)
 
-Runtime setting, not in git: `SEARCH_STUB_5XX_RATE=0.08`.
+Runtime setting, not in git: `SEARCH_ERROR_RATE=0.08`.
 
 ## Ground truth
 

@@ -28,23 +28,32 @@ One fault is on at a time. Turning one on turns the current one off first.
 | Grafana | http://localhost:3002 (anonymous viewer) |
 | k6 load | only while a fault is on |
 
-The code prismalens investigates is the booklogr checkout at `use-cases/booklogr/stacks/flask-compose/substrate/booklogr`. It has booklogr's real history. `healthy` is the clean branch, and a fault's commits sit on `main` on top of it. `task status` prints the path.
+## Point an agent at it
 
-## Point it at prismalens
+An agent under test gets what a real one gets: the alert, the code, and the telemetry endpoints above. It never reads anything under `use-cases/*/scenarios/`, which hold the answers.
 
-Alertmanager sends every alert to one receiver. Set these before `task up`:
+**Alerts.** Alertmanager sends every alert to one receiver. Set these before `task up`:
 
 | Variable | Default |
 |---|---|
-| `PRISMALENS_WEBHOOK_URL` | `http://host.docker.internal:3001/api/webhooks/prometheus` |
-| `PRISMALENS_TOKEN`, or `PRISMALENS_TOKEN_FILE` | none; sent as `Authorization: Bearer <token>` |
-
-`pl doctor` prints the token file path under "Webhook token". Two settings on the prismalens side let the container reach it:
-
-- `pl up` binds 127.0.0.1 by default. Start it with `--host 0.0.0.0` (or `PRISMALENS_HOST=0.0.0.0`).
-- prismalens rejects Host headers it doesn't know, with a 403. Set `PRISMALENS_ALLOWED_HOSTS=host.docker.internal`, or put the host-gateway IP in `PRISMALENS_WEBHOOK_URL`.
+| `AGENT_WEBHOOK_URL` | `http://host.docker.internal:3001/api/webhooks/prometheus` (prismalens `pl up`) |
+| `AGENT_WEBHOOK_TOKEN`, or `AGENT_WEBHOOK_TOKEN_FILE` | none; sent as `Authorization: Bearer <token>` |
 
 `task status` shows Alertmanager's own count of webhook deliveries sent and failed.
+
+**Code.** Each alert carries a `service` label, and each service has its own git repo, outside sreforge. Register each one with the agent by this folder, never by a folder inside sreforge, whose top level holds every scenario's answer:
+
+| `service` label | Code |
+|---|---|
+| `booklogr-api` | `use-cases/booklogr/stacks/flask-compose/substrate/booklogr`: booklogr's real history. `healthy` is the clean branch; a fault's commits sit on `main` above it. |
+| `book-metadata` | `use-cases/booklogr/stacks/flask-compose/substrate/book-metadata` |
+
+`task status` prints both paths.
+
+**prismalens.** `pl doctor` prints the token file under "Webhook token"; pass it as `AGENT_WEBHOOK_TOKEN_FILE`. Create one prismalens service per row above, named exactly as the label, with the folder as its code. Two settings on the prismalens side let the container reach it:
+
+- `pl up` binds 127.0.0.1 by default. Start it with `--host 0.0.0.0` (or `PRISMALENS_HOST=0.0.0.0`).
+- prismalens rejects Host headers it doesn't know, with a 403. Set `PRISMALENS_ALLOWED_HOSTS=host.docker.internal`, or put the host-gateway IP in `AGENT_WEBHOOK_URL`.
 
 Grouping is `group_by: ['alertname', 'service']`, so each delivery carries one alert name. Alertmanager keeps running across fault switches; only `task down` restarts it.
 

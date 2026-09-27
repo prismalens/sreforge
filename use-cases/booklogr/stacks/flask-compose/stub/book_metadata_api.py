@@ -20,7 +20,7 @@ from prometheus_client import Counter, Gauge, Histogram, generate_latest, CONTEN
 
 PORT = int(os.environ.get("PORT", "8080"))
 
-# Harness observability over this provider. Single-process ThreadingHTTPServer, so
+# Service metrics. Single-process ThreadingHTTPServer, so
 # the default (non-multiprocess) registry is fine and thread-safe. /metrics and
 # /health are deliberately NOT counted as metadata requests.
 REQUESTS = Counter(
@@ -93,10 +93,7 @@ class Handler(BaseHTTPRequestHandler):
     protocol_version = "HTTP/1.1"
 
     def send_response(self, code, message=None):
-        # Standard status line + Date, WITHOUT advertising a Server banner. The
-        # stdlib default leaks "BaseHTTP/x Python/y" (a stub giveaway) and faking
-        # "nginx" is betrayed by HTTP/1.0 wire behavior — so we send no Server
-        # header at all, which is unremarkable for an internal API.
+        # Standard status line + Date, without a Server banner.
         self.log_request(code)
         self.send_response_only(code, message)
         self.send_header("Date", self.date_time_string())
@@ -131,7 +128,7 @@ class Handler(BaseHTTPRequestHandler):
         INFLIGHT.inc()
         _started = time.perf_counter()
         try:
-            rate = float(os.environ.get("SEARCH_STUB_5XX_RATE", "0"))
+            rate = float(os.environ.get("SEARCH_ERROR_RATE", "0"))
             if rate > 0 and len(parts) >= 3 and parts[:2] == ["v1", "search"]:
                 with _search_counter_lock:
                     global _search_counter

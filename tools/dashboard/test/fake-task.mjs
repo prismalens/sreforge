@@ -15,9 +15,12 @@ if (args[0] === "status") {
     alerts: [
       { name: "BooklogrApiLatencyP99High", service: "booklogr-api", state: "firing", since: ago(4), summary: "p99 latency on /api/books is 2.4s (SLO 500ms)" },
     ],
-    substrate: { path: "/home/dev/sources/booklogr", head: "abc1234 Order library list by shelf position" },
+    code: [
+      { service: "booklogr-api", path: "/home/dev/sreforge/substrate/booklogr", head: "abc1234 Order library list by shelf position" },
+      { service: "book-metadata", path: "/home/dev/sreforge/substrate/book-metadata", head: "def5678 Book metadata service" },
+    ],
     links: { app: "http://localhost:5150", api: "http://localhost:5000", prometheus: "http://localhost:9090", alertmanager: "http://localhost:9093", grafana: "http://localhost:3002" },
-    prismalens: { webhook: "http://host.docker.internal:3001/api/webhooks/prometheus" },
+    receiver: { url: "http://host.docker.internal:3001/api/webhooks/prometheus", sent: 2, failed: 0 },
   }));
 } else {
   console.log(`fake task ${args.join(" ")}`);

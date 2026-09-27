@@ -1,4 +1,4 @@
-# Every alert goes to prismalens. scripts/up.sh writes the URL and bearer token into ../.secrets/.
+# Every alert goes to the agent under test. scripts/up.sh writes the URL and bearer token into ../.secrets/.
 global:
   resolve_timeout: 1m
 
@@ -7,14 +7,14 @@ route:
   group_wait: 5s
   group_interval: 10s
   repeat_interval: 5m
-  receiver: prismalens
+  receiver: agent
 
 receivers:
-  - name: prismalens
+  - name: agent
     webhook_configs:
-      - url_file: /etc/alertmanager/secrets/prismalens-url
+      - url_file: /etc/alertmanager/secrets/webhook-url
         send_resolved: true
         http_config:
           authorization:
             type: Bearer
-            credentials_file: /etc/alertmanager/secrets/prismalens-token
+            credentials_file: /etc/alertmanager/secrets/webhook-token

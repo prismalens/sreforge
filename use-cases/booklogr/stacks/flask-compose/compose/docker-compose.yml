@@ -72,12 +72,12 @@ services:
   # Stand-in for the public book-metadata API, so nothing leaves the machine.
   book-metadata:
     build:
-      context: ../stub
+      context: ../substrate/book-metadata
       dockerfile: Dockerfile
     image: booklogr-book-metadata:local
     container_name: booklogr-book-metadata
     environment:
-      SEARCH_STUB_5XX_RATE: ${SEARCH_STUB_5XX_RATE:-0}
+      SEARCH_ERROR_RATE: ${SEARCH_ERROR_RATE:-0}
     healthcheck:
       test: ["CMD", "python", "-c", "import urllib.request,sys; sys.exit(0 if urllib.request.urlopen('http://127.0.0.1:8080/health', timeout=3).status==200 else 1)"]
       interval: 5s

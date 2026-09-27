@@ -6,7 +6,7 @@ import { fileURLToPath } from "node:url";
 
 const STACK = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const SCENARIOS = resolve(STACK, "../../scenarios");
-const WORK = join(STACK, "substrate/booklogr");
+const CODE = { "booklogr-api": "substrate/booklogr", "book-metadata": "substrate/book-metadata" };
 const run = (cmd, args) => {
 	try {
 		return execFileSync(cmd, args, { encoding: "utf8", stdio: ["ignore", "pipe", "ignore"] }).trim();
@@ -56,7 +56,7 @@ async function alerts() {
 	}
 }
 
-// Alertmanager's own webhook counters: whether prismalens actually took the alerts.
+// Alertmanager's own webhook counters: whether the agent actually took the alerts.
 async function delivery() {
 	try {
 		const text = await (await fetch("http://localhost:9093/metrics")).text();
@@ -77,7 +77,11 @@ const status = {
 	fault: faultId ? { scenario: faultId, since: faultSince } : null,
 	scenarios: scenarios(),
 	alerts: await alerts(),
-	substrate: { path: WORK, head: existsSync(WORK) ? run("git", ["-C", WORK, "log", "-1", "--format=%h %s"]) : "" },
+	// One repo per `service` label; register each with the agent by this path.
+	code: Object.entries(CODE).map(([service, rel]) => {
+		const path = join(STACK, rel);
+		return { service, path, head: existsSync(path) ? run("git", ["-C", path, "log", "-1", "--format=%h %s"]) : "" };
+	}),
 	links: {
 		app: "http://localhost:5150",
 		api: "http://localhost:5000",
@@ -85,7 +89,7 @@ const status = {
 		alertmanager: "http://localhost:9093",
 		grafana: "http://localhost:3002",
 	},
-	prismalens: { webhook: readText(join(STACK, ".secrets/prismalens-url")), ...(await delivery()) },
+	receiver: { url: readText(join(STACK, ".secrets/webhook-url")), ...(await delivery()) },
 };
 
 if (process.argv.includes("--json")) {
@@ -95,8 +99,8 @@ if (process.argv.includes("--json")) {
 	console.log(`stack:     ${up.length ? up.map((s) => s.service).join(", ") : "down"}`);
 	console.log(`fault:     ${status.fault ? `${status.fault.scenario} (on since ${status.fault.since})` : "none"}`);
 	console.log(`firing:    ${status.alerts.map((a) => a.name).join(", ") || "nothing"}`);
-	console.log(`code:      ${status.substrate.path} @ ${status.substrate.head || "not set up"}`);
-	console.log(`prismalens webhook: ${status.prismalens.webhook || "not configured (task up writes it)"}`);
-	console.log(`deliveries: ${status.prismalens.sent} sent, ${status.prismalens.failed} failed`);
+	for (const c of status.code) console.log(`code:      ${c.service} -> ${c.path} @ ${c.head || "not set up"}`);
+	console.log(`webhook:   ${status.receiver.url || "not configured (task up writes it)"}`);
+	console.log(`delivered: ${status.receiver.sent} sent, ${status.receiver.failed} failed`);
 	for (const [k, v] of Object.entries(status.links)) console.log(`${k.padEnd(10)} ${v}`);
 }

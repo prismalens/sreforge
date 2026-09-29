@@ -1,152 +1,149 @@
 #!/usr/bin/env node
-// =============================================================================
-// tools/dashboard/server.mjs — SREForge OPERATOR CONTROL DASHBOARD (ADR-0024).
-//
-// Always-on, cross-use-case, HARNESS-SIDE control plane. A thin GUI-over-CLI:
-// it SPAWNS `pnpm forge <verb> <use-case>` child processes (never imports the
-// engine — the CLI stays the single source of truth), streams their stdout to
-// the browser via SSE, and reuses each use-case's own scripts/console-model.mjs
-// for status. Concurrency is per-use-case single-flight (refuse-not-queue);
-// docker is the source of truth for plane status (re-derived each refresh).
-//
-// LOOPBACK ONLY (127.0.0.1) — this is the never-agent-reachable guardrail
-// (ADR-0018 §1): agents live in containers on deploy networks and cannot reach
-// host loopback. It is strictly separate from the neutral agent page. The
-// frontend is a static file (index.html) served from disk — no build.
-//
-//   Run:  pnpm forge dashboard        (or: node tools/dashboard/server.mjs)
-//   PORT  default 7420.
-// =============================================================================
+// Loopback-only dashboard over `task up|down|fault|status`; one command at a time, output streamed over SSE.
 import { spawn } from "node:child_process";
-import { existsSync, readdirSync, readFileSync } from "node:fs";
+import { readFile } from "node:fs/promises";
 import { createServer } from "node:http";
 import { dirname, join, resolve } from "node:path";
-import { fileURLToPath, pathToFileURL } from "node:url";
+import { fileURLToPath } from "node:url";
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const REPO_ROOT = resolve(HERE, "..", "..");
-const USE_CASES_DIR = resolve(REPO_ROOT, "use-cases");
-const PORT = Number(process.env.PORT || 7420);
-const HOST = "127.0.0.1"; // loopback ONLY — the never-agent-reachable guardrail.
+const DEFAULT_TASK = ["pnpm", "exec", "task", "--silent"];
+const LOG_LIMIT = 5000;
 
-// Verbs the dashboard may invoke. spawn() uses an argv array (no shell), and we
-// still bound the surface to the known forge verbs + validate args as KEY=VALUE.
-const VERBS = new Set([
-  "fresh", "up", "arm", "agent", "agent-up", "mcp", "run", "verify", "incident", "e2e", "down", "status", "console",
-]);
-const ARG_RE = /^[A-Za-z_][A-Za-z0-9_]*=[A-Za-z0-9_.,:@/-]*$/;
+export function createDashboard({ task = DEFAULT_TASK, cwd = REPO_ROOT } = {}) {
+  const [bin, ...prefix] = task;
+  const clients = new Set();
+  let job = null;
 
-// ---- discover use-cases: use-cases/<name>/stacks/<stack> --------------------
-function discover() {
-  if (!existsSync(USE_CASES_DIR)) return [];
-  const out = [];
-  for (const name of readdirSync(USE_CASES_DIR, { withFileTypes: true }).filter((d) => d.isDirectory()).map((d) => d.name)) {
-    const stacksDir = join(USE_CASES_DIR, name, "stacks");
-    if (!existsSync(stacksDir)) continue;
-    for (const stack of readdirSync(stacksDir, { withFileTypes: true }).filter((d) => d.isDirectory()).map((d) => d.name)) {
-      const model = join(stacksDir, stack, "scripts", "console-model.mjs");
-      out.push({ useCase: name, stack, model: existsSync(model) ? model : null });
-    }
-  }
-  return out;
-}
-
-// ---- per-use-case status via its OWN console-model.mjs (read-only) ----------
-async function statusFor(uc) {
-  if (!uc.model) return { reachable: false, note: "no console-model.mjs" };
-  try {
-    const mod = await import(pathToFileURL(uc.model).href);
-    return await mod.gatherModel();
-  } catch (e) {
-    return { reachable: false, note: `model error: ${e.message}` };
-  }
-}
-
-// ---- in-memory job registry: per-use-case single-flight --------------------
-const jobs = new Map(); // jobId -> {id, useCase, verb, args, log:[], done, code, clients:Set<res>, startedAt}
-const busy = new Map(); // useCase -> jobId
-let seq = 0;
-
-function invoke(useCase, verb, args) {
-  if (!VERBS.has(verb)) throw new Error(`unknown verb '${verb}'`);
-  if (!discover().some((u) => u.useCase === useCase)) throw new Error(`unknown use-case '${useCase}'`);
-  for (const a of args) if (!ARG_RE.test(a)) throw new Error(`bad arg '${a}'`);
-  if (busy.has(useCase)) throw new Error(`${useCase} is busy (${jobs.get(busy.get(useCase))?.verb} in flight)`);
-
-  const id = `job-${++seq}`;
-  const job = { id, useCase, verb, args, log: [], done: false, code: null, clients: new Set(), startedAt: Date.now() };
-  jobs.set(id, job);
-  busy.set(useCase, id);
-
-  const child = spawn("pnpm", ["forge", verb, useCase, ...args], { cwd: REPO_ROOT });
-  const push = (chunk) => {
-    const s = chunk.toString();
-    job.log.push(s);
-    if (job.log.length > 2000) job.log.shift();
-    for (const res of job.clients) res.write(`data: ${JSON.stringify({ line: s })}\n\n`);
+  const send = (event, data) => {
+    const frame = `event: ${event}\ndata: ${JSON.stringify(data)}\n\n`;
+    for (const res of clients) res.write(frame);
   };
-  child.stdout.on("data", push);
-  child.stderr.on("data", push);
-  child.on("error", (e) => { push(`spawn error: ${e.message}\n`); job.done = true; job.code = -1; busy.delete(useCase); });
-  child.on("close", (code) => {
-    job.done = true; job.code = code; busy.delete(useCase);
-    for (const res of job.clients) { res.write(`event: done\ndata: ${JSON.stringify({ code })}\n\n`); res.end(); }
-    job.clients.clear();
-  });
-  return id;
-}
 
-// ---- http helpers ----------------------------------------------------------
-const json = (res, code, obj) => { res.writeHead(code, { "content-type": "application/json" }); res.end(JSON.stringify(obj)); };
-function readBody(req) {
-  return new Promise((ok) => { let b = ""; req.on("data", (c) => (b += c)); req.on("end", () => ok(b)); });
-}
-
-async function stateSnapshot() {
-  const ucs = discover();
-  const rows = await Promise.all(ucs.map(async (u) => ({
-    useCase: u.useCase, stack: u.stack, hasModel: !!u.model,
-    busy: busy.has(u.useCase) ? { jobId: busy.get(u.useCase), verb: jobs.get(busy.get(u.useCase))?.verb } : null,
-    status: await statusFor(u),
-  })));
-  return { host: `${HOST}:${PORT}`, verbs: [...VERBS], useCases: rows };
-}
-
-// ---- server ----------------------------------------------------------------
-const server = createServer(async (req, res) => {
-  const url = new URL(req.url, `http://${HOST}`);
-  try {
-    if (url.pathname === "/") {
-      // Static frontend, read from disk each request (no build; edit-and-refresh).
-      res.writeHead(200, { "content-type": "text/html; charset=utf-8" });
-      res.end(readFileSync(join(HERE, "index.html"), "utf8"));
-      return;
-    }
-    if (url.pathname === "/api/state") { json(res, 200, await stateSnapshot()); return; }
-
-    if (url.pathname === "/api/invoke" && req.method === "POST") {
-      const { useCase, verb, args = [] } = JSON.parse((await readBody(req)) || "{}");
-      try { json(res, 200, { id: invoke(useCase, verb, args) }); }
-      catch (e) { json(res, 409, { error: e.message }); }
-      return;
-    }
-
-    if (url.pathname.startsWith("/api/stream/")) {
-      const job = jobs.get(url.pathname.split("/").pop());
-      if (!job) { json(res, 404, { error: "no such job" }); return; }
-      res.writeHead(200, { "content-type": "text/event-stream", "cache-control": "no-cache", connection: "keep-alive" });
-      for (const line of job.log) res.write(`data: ${JSON.stringify({ line })}\n\n`);
-      if (job.done) { res.write(`event: done\ndata: ${JSON.stringify({ code: job.code })}\n\n`); res.end(); return; }
-      job.clients.add(res);
-      req.on("close", () => job.clients.delete(res));
-      return;
-    }
-    json(res, 404, { error: "not found" });
-  } catch (e) {
-    json(res, 500, { error: e.message });
+  function exec(args, onChunk) {
+    return new Promise((ok) => {
+      const child = spawn(bin, [...prefix, ...args], { cwd });
+      let out = "";
+      let err = "";
+      child.stdout.on("data", (c) => { out += c; onChunk?.(c.toString()); });
+      child.stderr.on("data", (c) => { err += c; onChunk?.(c.toString()); });
+      child.on("error", (e) => ok({ code: -1, out, err: `${err}${e.message}\n` }));
+      child.on("close", (code) => ok({ code, out, err }));
+    });
   }
-});
 
-server.listen(PORT, HOST, () => {
-  console.log(`SREForge control dashboard → http://${HOST}:${PORT}  (loopback only · not agent-reachable · Ctrl-C to stop)`);
-});
+  async function status() {
+    const { code, out, err } = await exec(["status", "--", "--json"]);
+    if (code !== 0) throw new Error(`task status exited ${code}: ${err.trim() || out.trim()}`);
+    try {
+      return JSON.parse(out);
+    } catch {
+      throw new Error(`task status did not print JSON: ${out.slice(0, 200)}`);
+    }
+  }
+
+  const jobView = () => job && { label: job.label, running: !job.done, code: job.code, startedAt: job.startedAt };
+
+  function log(line) {
+    job.log.push(line);
+    if (job.log.length > LOG_LIMIT) job.log.shift();
+    send("line", { line });
+  }
+
+  async function runSteps(steps) {
+    let code = 0;
+    for (const args of steps) {
+      log(`$ task ${args.join(" ")}\n`);
+      ({ code } = await exec(args, log));
+      if (code !== 0) break;
+    }
+    job.done = true;
+    job.code = code;
+    send("done", jobView());
+  }
+
+  async function start({ action, scenario, on }) {
+    if (job && !job.done) return [409, { error: `Busy: "${job.label}" is still running. Wait for it to finish.` }];
+    if (!["up", "down", "fault"].includes(action)) return [400, { error: `Unknown action "${action}".` }];
+    const label = action === "fault" ? `fault ${scenario} ${on ? "on" : "off"}` : action;
+    job = { label, log: [], done: false, code: null, startedAt: new Date().toISOString() };
+
+    let steps = [[action]];
+    if (action === "fault") {
+      let s;
+      try {
+        s = await status();
+      } catch (e) {
+        job = null;
+        return [502, { error: e.message }];
+      }
+      if (!s.scenarios?.some((x) => x.id === scenario)) {
+        job = null;
+        return [400, { error: `Unknown scenario "${scenario}".` }];
+      }
+      const current = s.fault?.scenario;
+      steps = [["fault", "--", scenario, on ? "on" : "off"]];
+      if (on && current && current !== scenario) steps.unshift(["fault", "--", current, "off"]);
+    }
+    send("start", jobView());
+    runSteps(steps);
+    return [202, jobView()];
+  }
+
+  const json = (res, code, body) => {
+    res.writeHead(code, { "content-type": "application/json" });
+    res.end(JSON.stringify(body));
+  };
+
+  const readBody = (req) => new Promise((ok) => {
+    let b = "";
+    req.on("data", (c) => (b += c));
+    req.on("end", () => ok(b));
+  });
+
+  return createServer(async (req, res) => {
+    const { pathname } = new URL(req.url, "http://localhost");
+    try {
+      if (pathname === "/" && req.method === "GET") {
+        res.writeHead(200, { "content-type": "text/html; charset=utf-8" });
+        res.end(await readFile(join(HERE, "index.html")));
+      } else if (pathname === "/api/status" && req.method === "GET") {
+        try {
+          json(res, 200, { ...(await status()), job: jobView() });
+        } catch (e) {
+          json(res, 502, { error: e.message, job: jobView() });
+        }
+      } else if (pathname === "/api/run" && req.method === "POST") {
+        let body;
+        try {
+          body = JSON.parse((await readBody(req)) || "{}");
+        } catch {
+          return json(res, 400, { error: "Body must be JSON." });
+        }
+        const [code, out] = await start(body);
+        json(res, code, out);
+      } else if (pathname === "/api/log" && req.method === "GET") {
+        res.writeHead(200, { "content-type": "text/event-stream", "cache-control": "no-cache", connection: "keep-alive" });
+        if (job) {
+          res.write(`event: start\ndata: ${JSON.stringify(jobView())}\n\n`);
+          for (const line of job.log) res.write(`event: line\ndata: ${JSON.stringify({ line })}\n\n`);
+          if (job.done) res.write(`event: done\ndata: ${JSON.stringify(jobView())}\n\n`);
+        }
+        clients.add(res);
+        req.on("close", () => clients.delete(res));
+      } else {
+        json(res, 404, { error: "Not found." });
+      }
+    } catch (e) {
+      json(res, 500, { error: e.message });
+    }
+  });
+}
+
+if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
+  const port = Number(process.env.PORT || 7420);
+  createDashboard().listen(port, "127.0.0.1", () => {
+    console.log(`sreforge dashboard: http://127.0.0.1:${port}`);
+  });
+}

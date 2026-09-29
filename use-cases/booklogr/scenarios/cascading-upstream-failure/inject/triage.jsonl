@@ -1,4 +1,0 @@
-{"channel": "#booklogr-support", "user": "dana.k", "ts": "2026-07-21T09:22:14Z", "text": "couple of readers saying their library page just spins today — one says their shelf has been loading forever and never shows the books"}
-{"channel": "#incidents", "user": "marco.oncall", "ts": "2026-07-21T09:24:02Z", "text": "confirmed, opening the main book list is crawling for me too and the search box lags behind it. feels like the API is generally slow, not one endpoint"}
-{"channel": "#incidents", "user": "priya.sre", "ts": "2026-07-21T09:25:37Z", "text": "p99 latency graph went vertical around 09:20, sitting well over where it normally does. looks broad, most routes"}
-{"channel": "#incidents", "user": "marco.oncall", "ts": "2026-07-21T09:27:10Z", "text": "there was a deploy that went out ~10 min before this started, timing lines up. logs look clean though, just everything's slow"}

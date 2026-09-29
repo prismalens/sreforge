@@ -1,5 +1,5 @@
 name: Bug report
-description: Something in the SREForge harness behaves incorrectly.
+description: Something in the sreforge env behaves incorrectly.
 labels: ["bug"]
 body:
   - type: markdown

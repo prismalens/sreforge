@@ -1,11 +1,12 @@
 #!/usr/bin/env bash
-# Tear down the booklogr app deployment + observability (the resettable stack)
-# and the load plane, including volumes. Leaves the shared forge
-# (infra/forge/forge.yml) running.
+# Stop everything, drop the volumes, and put the booklogr checkout back on `healthy`.
 set -euo pipefail
-HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-STACK="$(dirname "$HERE")"
-cd "$STACK"
-. "$HERE/lib-deploy.sh"   # neutral DEPLOY_DIR + COMPOSE_FILE/LOAD_FILE
-docker compose -p booklogr-edge -f "$LOAD_FILE" down 2>/dev/null || true
-docker compose -f "$COMPOSE_FILE" down -v "$@"
+STACK="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+WORK="$STACK/substrate/booklogr"
+docker compose -f "$STACK/compose/docker-compose.yml" --profile load down -v --remove-orphans
+rm -f "$STACK/.fault"
+: > "$STACK/compose/.env"
+if git -C "$WORK" rev-parse --verify --quiet healthy >/dev/null 2>&1; then
+  git -C "$WORK" checkout --quiet -B main healthy
+  git -C "$WORK" clean -fdq
+fi

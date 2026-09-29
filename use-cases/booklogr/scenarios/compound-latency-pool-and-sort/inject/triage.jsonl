@@ -1,4 +1,0 @@
-{"channel": "#booklogr-support", "user": "dana.k", "ts": "2026-07-21T14:12:03Z", "text": "getting reports that the library page is hanging indefinitely — readers are seeing spinning loaders on /v1/books"}
-{"channel": "#incidents", "user": "marco.oncall", "ts": "2026-07-21T14:13:41Z", "text": "confirming the latency spike. browsing shelves and searching titles are both extremely sluggish across the board"}
-{"channel": "#incidents", "user": "priya.sre", "ts": "2026-07-21T14:14:58Z", "text": "BooklogrApiLatencyP99High alert just fired. p99 latency spiked past 300ms and stays elevated"}
-{"channel": "#incidents", "user": "marco.oncall", "ts": "2026-07-21T14:16:12Z", "text": "looks like there were recent deploys right before the latency curve went up. system logs don't show crashes, just heavy request queueing"}

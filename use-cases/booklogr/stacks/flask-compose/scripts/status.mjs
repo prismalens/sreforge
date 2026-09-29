@@ -1,114 +1,106 @@
-import { execFile as _execFile } from "node:child_process";
-import { existsSync } from "node:fs";
-import { dirname, resolve } from "node:path";
+// status.mjs [--json]: what is running, which fault is on, what is firing. The dashboard reads --json.
+import { execFileSync } from "node:child_process";
+import { existsSync, readdirSync, readFileSync } from "node:fs";
+import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
-import { promisify } from "node:util";
-import {
-	classifyRunnerError,
-	getStartError,
-	isRunning,
-} from "../../../../../tools/doctor/lib.mjs";
-import {
-	DEPLOY_SERVICES,
-	firingNames,
-	getAlerts,
-	P99_EXPR,
-	PRIMARY_ALERT,
-	PROM,
-	parseArgs,
-	queryScalar,
-} from "./lib.mjs";
 
-const execFile = promisify(_execFile);
-const HERE = dirname(fileURLToPath(import.meta.url));
-const STACK = resolve(HERE, "..");
+const STACK = resolve(dirname(fileURLToPath(import.meta.url)), "..");
+const SCENARIOS = resolve(STACK, "../../scenarios");
+const CODE = { "booklogr-api": "substrate/booklogr", "book-metadata": "substrate/book-metadata" };
+const run = (cmd, args) => {
+	try {
+		return execFileSync(cmd, args, { encoding: "utf8", stdio: ["ignore", "pipe", "ignore"] }).trim();
+	} catch {
+		return "";
+	}
+};
+const readText = (p) => (existsSync(p) ? readFileSync(p, "utf8").trim() : "");
 
-const svcResults = await Promise.all(
-	DEPLOY_SERVICES.map(async (svc) => {
-		try {
-			const { stdout } = await execFile(
-				"docker",
-				[
-					"inspect",
-					"-f",
-					"{{.State.Status}} {{if .State.Health}}{{.State.Health.Status}}{{else}}none{{end}}",
-					svc,
-				],
-				{ encoding: "utf8", timeout: 5000 },
-			);
-			const out = stdout.trim();
-			if (out === "running healthy" || out === "running none") {
-				return { svc, ok: true };
-			}
-			return { svc, ok: false, state: out };
-		} catch {
-			return { svc, ok: false, state: "missing" };
-		}
+function stack() {
+	const out = run("docker", ["compose", "-f", join(STACK, "compose/docker-compose.yml"), "--profile", "load", "ps", "-a", "--format", "json"]);
+	if (!out) return [];
+	const rows = out.startsWith("[") ? JSON.parse(out) : out.split("\n").map((l) => JSON.parse(l));
+	return rows.map((r) => ({ service: r.Service, state: r.State, health: r.Health || "" }));
+}
+
+function scenarios() {
+	return readdirSync(SCENARIOS)
+		.filter((id) => existsSync(join(SCENARIOS, id, "fault.env")))
+		.map((id) => {
+			const toml = readText(join(SCENARIOS, id, "scenario.toml"));
+			const env = readText(join(SCENARIOS, id, "fault.env"));
+			return {
+				id,
+				title: toml.match(/^title\s*=\s*"([^"]*)"/m)?.[1] ?? id,
+				alert: env.match(/^ALERT=(.*)$/m)?.[1] ?? "",
+				description: (toml.match(/^description\s*=\s*"""([\s\S]*?)"""/m)?.[1] ?? "")
+					.replace(/\s+/g, " ")
+					.trim()
+					.split(/(?<=\.) /)[0],
+			};
+		});
+}
+
+async function alerts() {
+	try {
+		const res = await fetch("http://localhost:9093/api/v2/alerts?active=true&silenced=false&inhibited=false");
+		return (await res.json()).map((a) => ({
+			name: a.labels.alertname,
+			service: a.labels.service ?? "",
+			state: a.status?.state === "active" ? "firing" : a.status?.state,
+			since: a.startsAt,
+			summary: a.annotations?.summary ?? "",
+		}));
+	} catch {
+		return [];
+	}
+}
+
+// Alertmanager's own webhook counters: whether the agent actually took the alerts.
+async function delivery() {
+	try {
+		const text = await (await fetch("http://localhost:9093/metrics")).text();
+		const sum = (name) =>
+			text
+				.split("\n")
+				.filter((l) => l.startsWith(`${name}{`) && l.includes('integration="webhook"'))
+				.reduce((n, l) => n + Number(l.split(" ").pop()), 0);
+		return { sent: sum("alertmanager_notifications_total"), failed: sum("alertmanager_notifications_failed_total") };
+	} catch {
+		return { sent: 0, failed: 0 };
+	}
+}
+
+const [faultId, faultSince] = readText(join(STACK, ".fault")).split(" ");
+const status = {
+	stack: stack(),
+	fault: faultId ? { scenario: faultId, since: faultSince } : null,
+	scenarios: scenarios(),
+	alerts: await alerts(),
+	// One repo per `service` label; register each with the agent by this path.
+	code: Object.entries(CODE).map(([service, rel]) => {
+		const path = join(STACK, rel);
+		return { service, path, head: existsSync(path) ? run("git", ["-C", path, "log", "-1", "--format=%h %s"]) : "" };
 	}),
-);
+	links: {
+		app: "http://localhost:5150",
+		api: "http://localhost:5000",
+		prometheus: "http://localhost:9090",
+		alertmanager: "http://localhost:9093",
+		grafana: "http://localhost:3002",
+	},
+	receiver: { url: readText(join(STACK, ".secrets/webhook-url")), ...(await delivery()) },
+};
 
-const deployHealthy = svcResults.filter((r) => r.ok).length;
-const offenders = svcResults
-	.filter((r) => !r.ok)
-	.map((r) => `${r.svc}: ${r.state}`);
-
-const giteaOk = isRunning("sreforge-gitea");
-const runnerOk = isRunning("sreforge-runner");
-let runnerHint = "";
-if (!runnerOk) {
-	const err = getStartError("sreforge-runner");
-	if (classifyRunnerError(err) === "stale-shim") runnerHint = " (stale shim)";
+if (process.argv.includes("--json")) {
+	console.log(JSON.stringify(status));
+} else {
+	const up = status.stack.filter((s) => s.state === "running");
+	console.log(`stack:     ${up.length ? up.map((s) => s.service).join(", ") : "down"}`);
+	console.log(`fault:     ${status.fault ? `${status.fault.scenario} (on since ${status.fault.since})` : "none"}`);
+	console.log(`firing:    ${status.alerts.map((a) => a.name).join(", ") || "nothing"}`);
+	for (const c of status.code) console.log(`code:      ${c.service} -> ${c.path} @ ${c.head || "not set up"}`);
+	console.log(`webhook:   ${status.receiver.url || "not configured (task up writes it)"}`);
+	console.log(`delivered: ${status.receiver.sent} sent, ${status.receiver.failed} failed`);
+	for (const [k, v] of Object.entries(status.links)) console.log(`${k.padEnd(10)} ${v}`);
 }
-
-const agentWorkspace = existsSync(resolve(STACK, ".run-workspace", "booklogr"));
-
-let exitCode = 0;
-if (!giteaOk || !runnerOk || deployHealthy !== DEPLOY_SERVICES.length) {
-	exitCode = 1;
-}
-
-process.stdout.write(`[forge plane]  gitea: ${giteaOk ? "running" : "DOWN"}\n`);
-process.stdout.write(
-	`[forge plane]  runner: ${runnerOk ? "running" : "DOWN"}${runnerHint}`,
-);
-if (!giteaOk || !runnerOk) {
-	process.stdout.write(`  hint: pnpm forge forge-up`);
-}
-process.stdout.write("\n");
-
-let deployStr = `${deployHealthy}/${DEPLOY_SERVICES.length} healthy`;
-if (offenders.length > 0) {
-	deployStr += ` (${offenders.join(", ")})`;
-}
-process.stdout.write(`[deploy plane] services: ${deployStr}\n`);
-
-process.stdout.write(
-	`[agent rig]    workspace: ${agentWorkspace ? "present" : "missing"}\n`,
-);
-
-const a = parseArgs();
-const prom = a.prom || PROM;
-
-try {
-	const [alerts, p99] = await Promise.race([
-		Promise.all([getAlerts(prom), queryScalar(P99_EXPR, prom)]),
-		new Promise((_, rej) => setTimeout(() => rej(new Error("timeout")), 3000)),
-	]);
-	const firing = firingNames(alerts);
-	process.stdout.write(
-		`[alerting]     p99 (30s):  ${p99 == null ? "n/a" : `${(p99 * 1000).toFixed(0)}ms`}\n`,
-	);
-	process.stdout.write(
-		`[alerting]     primary:    ${PRIMARY_ALERT} -> ${firing.includes(PRIMARY_ALERT) ? "FIRING" : "clear"}\n`,
-	);
-	process.stdout.write(
-		`[alerting]     firing:     ${firing.length ? firing.join(", ") : "(none)"}\n`,
-	);
-} catch (e) {
-	process.stdout.write(
-		`[alerting]     prometheus: unreachable (${e.message})\n`,
-	);
-	exitCode = 1;
-}
-
-process.exit(exitCode);

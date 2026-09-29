@@ -1,51 +1,34 @@
-# Contributing to SREForge
+# Contributing to sreforge
 
-Thanks for your interest in SREForge — a contamination-controlled,
-event-triggered evaluation harness for autonomous SWE/SRE agents. This is a
-young, focused project; contributions of all sizes are welcome.
+Thanks for your interest in sreforge, a running environment for testing
+prismalens: booklogr, Prometheus and Alertmanager in docker compose, with faults
+you switch on.
 
 ## Ground rules
 
 - **`main` is protected.** Every change lands through a pull request with green
   CI. Direct pushes to `main` are not allowed (for anyone, including the
   maintainer).
-- **Never commit secrets, and never commit the substrate.** `.env` and the
-  imported `substrate/` checkout are gitignored on purpose — keep them that way.
-- **Do not "fix" the substrate.** The apps under `use-cases/**` are the system
-  *under evaluation*; some carry deliberate regressions that the harness exists
-  to exercise. Don't repair them in this repo.
+- **Never commit secrets or the booklogr checkout.** `.secrets/` and
+  `substrate/` are gitignored on purpose.
 - Keep PRs focused. One logical change per PR makes review fast.
 
 ## Development setup
 
-Requirements: **Node >= 18** and **pnpm** (the repo pins pnpm via the
-`packageManager` field — `corepack enable` will select the right version).
-
-The engine lives in `core/` and builds on its own lockfile:
+Requirements: docker, **Node >= 18** and **pnpm** (`corepack enable` selects the
+pinned version). See the [README](README.md) to run the env.
 
 ```bash
-git clone https://github.com/prismalens/sreforge.git
-cd sreforge/core
-pnpm install --frozen-lockfile
-pnpm build        # tsc -> dist/
+pnpm install
+pnpm test         # rules-lint, rca-judge and dashboard tests
+pnpm rules-lint   # every alert rule carries a service label
 ```
-
-Repo-root tooling (plain Node scripts, no install needed):
-
-```bash
-pnpm guard        # contamination-guard: scan a target for harness leakage
-pnpm detell       # detell-judge: score a target for "is this a rig?" tells
-```
-
-Each use-case rig lives under `use-cases/<name>/stacks/<stack>/`; see that
-stack's `scripts/README.md` for its lifecycle (bring up → arm → run an incident
-→ verify → tear down).
 
 ## Making a change
 
 1. **Branch** off `main`: `git checkout -b fix/short-description`.
 2. Make the change. Add or update tests where it makes sense.
-3. Make sure the relevant build/tests pass locally (at minimum, `core` builds).
+3. Make sure `pnpm test` passes locally.
 4. **Commit** using [Conventional Commits](https://www.conventionalcommits.org/):
    `feat:`, `fix:`, `docs:`, `refactor:`, `test:`, `chore:`, `ci:`, `perf:`.
    The PR *title* must also be a conventional commit — it becomes the squash

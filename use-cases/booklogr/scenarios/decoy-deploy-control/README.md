@@ -1,65 +1,27 @@
-# decoy-deploy-control
+# Cache outage masked by an unrelated recent deploy
 
-An `incident`-profile scenario on the `booklogr` / `flask-compose` stack.
+p99 request latency on book search breaches the 300ms SLO and fires BooklogrApiLatencyP99High. There IS a real recent deploy on main, but it only fixes an unrelated HTTP status code bug in the settings endpoint and is physically incapable of affecting search latency. The actual cause is that the deployed cache backend has drifted to NullCache at the runtime/infra layer, outside application source control — every search request now misses the cache and pays the book-metadata upstream's full 1.1-1.3s latency. An agent that anchors on "what changed recently in git" and reverts the innocent deploy will NOT clear the incident: the fix must restore the cache backend itself. The scenario is a control for deploy-correlation reasoning: recency of a commit does not by itself establish causation.
 
-**Incident (one line):** the deployed cache backend has drifted to `NullCache` at the runtime/infra layer, driving p99 search latency above the 300ms SLO and firing `BooklogrApiLatencyP99High` — while the only commit that landed on main recently is an unrelated (and harmless) HTTP-status-code fix. The fix must restore the cache backend; reverting the recent commit does nothing.
-
-The agent is paged with the firing alert — the engine's `ContextAssembler`
-renders the neutral incident brief from the alert plus the live endpoints — then
-investigates the live stack and submits a fix via `submit`. The harness
-builds + redeploys it, then
-the [mitigation oracle](verify/oracle.md) scores whether the alert clears and
-stays cleared **under still-active load**.
-
-This scenario is a **deploy-correlation control**: it exists to check whether
-a fix genuinely addresses the mechanism, or merely reverts whatever changed
-most recently in git. See [verify/oracle.md](verify/oracle.md) for the
-mandatory negative test.
-
-## Layout
-
-| File                          | Purpose                                                            |
-| ----------------------------- | ------------------------------------------------------------------ |
-| `scenario.toml`               | machine-readable manifest (profile, expected alert, timing, paths, inject, verify) |
-| `inject/fault.patch`          | the innocent recent-deploy patch applied at arm time (does NOT cause the incident) |
-| `solution/fix.patch`          | canonical reference fix (pins the cache backend)                   |
-| `solution/reference-fix.md`   | acceptable fix families + why the negative test matters            |
-| `verify/oracle.md`            | v1 mitigation-oracle spec (CompoundedOracle contract) incl. the mandatory negative test |
-| `verify/negative-fixture.patch` | the "wrong fix" (revert of the innocent commit) the negative test applies |
-
-The stack itself lives at `../../stacks/flask-compose/`.
-
-## Run it end to end
-
-Before running this scenario for the first time, you must create its local
-anchor base — this scenario has its OWN preparation script (not the generic
-`prepare-scenario.sh`), because its anchor carries two extra backdated "old
-code" commits:
+## Switch it on
 
 ```bash
-bash scripts/prepare-decoy-deploy-control-base.sh
+task fault -- decoy-deploy-control on     # fires BooklogrApiLatencyP99High
+task fault -- decoy-deploy-control off
 ```
 
-The full automated loop — arm the incident (deploy the innocent commit, apply
-the runtime cache override, start the storm, confirm-fire), drive a scripted
-reference fix through the engine (CI gate → auto-merge → redeploy → behavioral
-oracle under still-active load), then reset — is one command from the stack
-dir:
+Load while on: k6 `booklogr-storm.js` at 25 requests/s, library seeded to 150,000 books.
 
-```bash
-SCENARIO_ID=decoy-deploy-control pnpm forge arm booklogr
-pnpm forge run booklogr SCENARIO_ID=decoy-deploy-control
-```
+## What changes in the booklogr checkout
 
-## Inspect the running stack
+Commits on top of `healthy`, newest last:
 
-| Resource     | URL                       |
-| ------------ | ------------------------- |
-| booklogr API | http://localhost:5000     |
-| booklogr web | http://localhost:5150     |
-| Prometheus   | http://localhost:9090     |
-| Alertmanager | http://localhost:9093     |
-| Grafana      | http://localhost:3002     |
+- "Read cache backend from environment" by Andreas Backström, dated 2026-06-15 09:12:31 +0200 (`inject/cache-from-env.sh`)
+- "Log effective cache backend at boot" by Andreas Backström, dated 2026-06-20 16:47:03 +0200 (`inject/boot-log.sh`)
+- "Fix invalid HTTP status in settings response" by Andreas Backström, dated at switch-on time (`inject/fault.patch`)
 
-> API metrics are exported on a dedicated port (`booklogr-api:9090`) by the
-> prometheus-flask-exporter in multiprocess mode — they are not on `:5000/metrics`.
+Runtime setting, not in git: `CACHE_TYPE=NullCache`.
+
+## Ground truth
+
+- `verify/oracle.md`: the root cause, read by `tools/rca-judge`
+- `solution/fix.patch`: the reference fix

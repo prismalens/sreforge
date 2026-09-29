@@ -1,54 +1,23 @@
-# db-pool-exhaustion-deploy
+# DB pool exhaustion blocks workers on uncached reads
 
-An `incident`-profile scenario on the `booklogr` / `flask-compose` stack.
+A recent deploy-time configuration change reduces the SQLAlchemy database connection pool to a single connection and switches the Gunicorn worker model to threaded (gthread, threads=8). The uncached `/v1/books` library list route hits Postgres on every request. Under moderate library-read load, concurrent request threads within a worker process pile up on that process's single database connection, serializing all uncached reads. As threads block on database I/O, the workers become starved, causing even cached endpoints like `/v1/books/search` to queue and time out. This drives p99 request latency above the 300ms SLO and triggers the BooklogrApiLatencyP99High alert. The fix must restore a sufficient database connection pool size so that database reads can proceed concurrently and Gunicorn workers do not back up.
 
-**Incident (one line):** A deploy-time configuration change reduces the database connection pool size and switches gunicorn to threaded workers, exhausting DB connections under moderate uncached read load and starving workers until p99 latency breaches the 300 ms SLO and fires `BooklogrApiLatencyP99High`. The fix must restore DB connection pool headroom.
-
-The agent is paged with the firing alert — the engine's `ContextAssembler`
-renders the neutral incident brief from the alert plus the live endpoints — then
-investigates the live stack and submits a fix via `submit`. The harness
-builds + redeploys it, then
-the [mitigation oracle](verify/oracle.md) scores whether the alert clears and
-stays cleared **under still-active load**.
-
-## Layout
-
-| File                          | Purpose                                                            |
-| ----------------------------- | ------------------------------------------------------------------ |
-| `scenario.toml`               | machine-readable manifest (profile, expected alert, timing, paths, inject, verify) |
-| `inject/fault.patch`          | the actual patch to apply at arm time to inject the issue          |
-| `solution/fix.patch`          | canonical reference fix (reverting the connection-limiting patch)  |
-| `verify/oracle.md`            | v1 mitigation-oracle spec (CompoundedOracle contract)              |
-
-The stack itself lives at `../../stacks/flask-compose/`.
-
-## Run it end to end
-
-Before running this scenario for the first time, you must create its local anchor base:
+## Switch it on
 
 ```bash
-bash scripts/prepare-scenario.sh db-pool-exhaustion-deploy
+task fault -- db-pool-exhaustion-deploy on     # fires BooklogrApiLatencyP99High
+task fault -- db-pool-exhaustion-deploy off
 ```
 
-The full automated loop — arm the incident (regress + storm + confirm-fire),
-drive a scripted reference fix through the engine (CI gate → auto-merge →
-redeploy → behavioral oracle under still-active load), then reset — is one
-command from the stack dir:
+Load while on: k6 `booklogr-storm-mixed.js` at 25 requests/s, library seeded to 150,000 books.
 
-```bash
-SCENARIO_ID=db-pool-exhaustion-deploy pnpm forge arm booklogr
-SCENARIO_ID=db-pool-exhaustion-deploy pnpm forge run booklogr
-```
+## What changes in the booklogr checkout
 
-## Inspect the running stack
+Commits on top of `healthy`, newest last:
 
-| Resource     | URL                       |
-| ------------ | ------------------------- |
-| booklogr API | http://localhost:5000     |
-| booklogr web | http://localhost:5150     |
-| Prometheus   | http://localhost:9090     |
-| Alertmanager | http://localhost:9093     |
-| Grafana      | http://localhost:3002     |
+- "Reduce DB connection footprint" by Andreas Backström, dated at switch-on time (`inject/fault.patch`)
 
-> API metrics are exported on a dedicated port (`booklogr-api:9090`) by the
-> prometheus-flask-exporter in multiprocess mode — they are not on `:5000/metrics`.
+## Ground truth
+
+- `verify/oracle.md`: the root cause, read by `tools/rca-judge`
+- `solution/fix.patch`: the reference fix

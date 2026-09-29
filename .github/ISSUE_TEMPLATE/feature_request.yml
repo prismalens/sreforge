@@ -1,5 +1,5 @@
 name: Feature request
-description: Suggest an idea or improvement for SREForge.
+description: Suggest an idea or improvement for sreforge.
 labels: ["enhancement"]
 body:
   - type: textarea
@@ -14,7 +14,7 @@ body:
     id: proposal
     attributes:
       label: Proposed solution
-      description: What you would like SREForge to do. Sketches and example commands welcome.
+      description: What you would like sreforge to do. Sketches and example commands welcome.
     validations:
       required: false
   - type: textarea
@@ -35,7 +35,7 @@ body:
     id: scope
     attributes:
       label: Fit
-      description: SREForge is a contamination-controlled evaluation harness — it keeps the rig hidden from the agent under test.
+      description: sreforge is a running environment for testing prismalens.
       options:
-        - label: This fits SREForge's scope and does not leak the harness to the agent under test.
+        - label: This fits sreforge's scope: the env, its faults, or grading an RCA.
           required: false

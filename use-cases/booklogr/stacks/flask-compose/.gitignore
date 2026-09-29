@@ -1,25 +1,7 @@
-# The imported substrate checkout (populated by scripts/import-substrate.sh).
-# It is held in the local Gitea forge, never committed into the harness repo
-# (physical harness/substrate separation, D12).
+# The booklogr checkout (scripts/setup.sh), the prismalens webhook secrets (scripts/up.sh),
+# a fault's runtime env and the active-fault marker (scripts/fault.sh).
 substrate/
-
-# Local secrets + runner token.
-.env
-
-# Compose-managed local state (if any binds land here).
-gitea-data/
-act-runner-data/
-
-# Per-run records written by the conductor driver (run-incident.mjs) — ephemeral
-# run artifacts (record.json / diff.patch / transcript.txt), regenerated each run.
-runs/
-
-# clean per-run agent workspace (de-tell'd clone, regenerated each run)
-.run-workspace/
-
-# go-task change-detection checksums (Taskfile.yml sources/generates cache)
+.secrets/
+compose/.env
+.fault
 .task/
-
-# Served ambient alert rule reconciled by arm-regress.sh from
-# furniture/ambient-rules.yml, which is the authoritative copy (#121) — build artifact.
-observability/rules/ambient-rules.yml

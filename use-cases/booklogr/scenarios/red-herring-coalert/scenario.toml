@@ -50,7 +50,7 @@ oracle   = "verify/oracle.md"                                    # BINDING — v
 
 # --- fault injection -----------------------------------------------------------
 # Reuses latency-cache-stampede's cache regression (CACHE_TYPE = "NullCache" in api/config.py).
-# In addition, arm applies SEARCH_STUB_5XX_RATE=0.08 to book-metadata via compose env to trigger
+# In addition, arm applies SEARCH_ERROR_RATE=0.08 to book-metadata via compose env to trigger
 # the concurrent BookMetadataProviderErrorsElevated warning alert.
 [inject]
 command  = "docker compose -p booklogr-edge -f compose/load.yml up -d"

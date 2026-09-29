@@ -3,296 +3,418 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>SREForge · Control</title>
+<title>sreforge</title>
+<!-- One page for the env: start the stack, switch a fault on, watch the alert reach the agent under test. -->
 <style>
-  /* ── SREForge Control — incident-response flight deck ─────────────────────
-     Ink-navy night-ops base · cyan telemetry accent · ops-signal status trio.
-     Monospace instrument readout. Signature: the p99-vs-SLO threshold gauge —
-     a signal crossing a line and firing. Boldness spent there; rest kept quiet. */
-  :root{
-    --void:#0b0f17; --bay:#121826; --bay2:#0d1220; --inset:#080b12;
-    --rule:#1d2637; --rule2:#2a3446;
-    --ink:#e2e8f2; --mute:#8b97ad; --faint:#57627a;
-    --signal:#57d0e6;              /* cyan telemetry — interactive */
-    --nominal:#46c08a; --elevated:#e0a63c; --alarm:#ff5d52;
-    --alarmglow:rgba(255,93,82,.5);
-    --mono:"JetBrains Mono","Cascadia Code","SF Mono",ui-monospace,Menlo,Consolas,monospace;
-    --sans:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;
-    --ey:.12em;
+  :root {
+    --bg: #f6f5f2; --panel: #ffffff; --line: #e4e2dc; --line-soft: #efede8;
+    --ink: #1c1b19; --ink-2: #57544d; --ink-3: #8a867d;
+    --accent: #3a5bd9; --accent-ink: #ffffff; --accent-soft: #eef1fd;
+    --ok: #1f8a4c; --ok-soft: #e6f4ec; --warn: #b26b00; --warn-soft: #fbf1e0;
+    --bad: #c8322b; --bad-soft: #fbe9e7; --idle: #b4b0a6;
+    --term-bg: #16171a; --term-ink: #d6d8dd; --term-dim: #7d828c;
+    --sans: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+    --mono: ui-monospace, "SF Mono", "Cascadia Code", Menlo, Consolas, monospace;
+    --radius: 10px;
   }
-  *{box-sizing:border-box}
-  html,body{margin:0}
-  body{background:var(--void);color:var(--ink);font-family:var(--mono);font-size:13px;line-height:1.5;
-    padding-bottom:64px;-webkit-font-smoothing:antialiased;font-variant-numeric:tabular-nums}
-  .ey{font-size:10px;letter-spacing:var(--ey);text-transform:uppercase;color:var(--faint);font-weight:600}
-  .ref{font-size:9px;color:var(--signal);margin-left:9px;letter-spacing:.06em}
-  .doclink{font-size:11px;color:var(--signal);letter-spacing:.04em}
-  a{color:var(--signal);text-decoration:none}
-  :focus-visible{outline:2px solid var(--signal);outline-offset:2px}
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #131416; --panel: #1b1c1f; --line: #2b2d31; --line-soft: #232428;
+      --ink: #ecebe8; --ink-2: #a9a69f; --ink-3: #75726c;
+      --accent: #7d97ff; --accent-ink: #0f1220; --accent-soft: #1f2440;
+      --ok: #4cc47f; --ok-soft: #173024; --warn: #e3a53c; --warn-soft: #33270f;
+      --bad: #f06b62; --bad-soft: #3a1b19; --idle: #55534e;
+      --term-bg: #0e0f11;
+    }
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--ink); font: 14px/1.5 var(--sans); -webkit-font-smoothing: antialiased; }
+  a { color: var(--accent); text-decoration: none; }
+  a:hover { text-decoration: underline; }
+  code, .mono { font-family: var(--mono); font-size: 12.5px; }
+  :focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+  .wrap { max-width: 1120px; margin: 0 auto; padding: 28px 24px 48px; }
 
-  /* header — call-sign rail */
-  header{position:sticky;top:0;z-index:5;display:flex;align-items:center;gap:16px;
-    padding:13px 26px;background:linear-gradient(180deg,rgba(11,15,23,.94),rgba(11,15,23,.82));
-    backdrop-filter:blur(8px);border-bottom:1px solid var(--rule)}
-  .brand{font-family:var(--sans);font-weight:700;letter-spacing:.16em;font-size:13px;text-transform:uppercase;color:var(--mute)}
-  .brand b{color:var(--ink)} .brand .sep{color:var(--signal);margin:0 6px}
-  .rail{margin-left:auto;display:flex;align-items:center;gap:14px}
-  .tag{font-size:10px;letter-spacing:var(--ey);text-transform:uppercase;color:var(--nominal);
-    border:1px solid #1d4a38;background:#0c2018;border-radius:2px;padding:3px 9px}
-  .beat{display:inline-flex;align-items:center;gap:7px;font-size:11px;color:var(--mute)}
-  .beat i{width:6px;height:6px;border-radius:50%;background:var(--nominal);box-shadow:0 0 6px var(--nominal);animation:beat 2.4s infinite}
-  @keyframes beat{0%,100%{opacity:1}50%{opacity:.25}}
+  header { display: flex; align-items: flex-end; gap: 16px; flex-wrap: wrap; margin-bottom: 22px; }
+  h1 { margin: 0; font-size: 22px; letter-spacing: -0.01em; }
+  .lede { margin: 2px 0 0; color: var(--ink-2); max-width: 640px; }
+  .updated { margin-left: auto; color: var(--ink-3); font-size: 12px; display: flex; align-items: center; gap: 6px; }
 
-  main{max-width:1000px;margin:0 auto;padding:24px 26px 0}
+  .flow { display: grid; grid-template-columns: repeat(4, 1fr); gap: 0; margin-bottom: 22px; }
+  .step { position: relative; background: var(--panel); border: 1px solid var(--line); padding: 14px 16px 14px 18px; min-width: 0; }
+  .step:first-child { border-radius: var(--radius) 0 0 var(--radius); }
+  .step:last-child { border-radius: 0 var(--radius) var(--radius) 0; }
+  .step + .step { border-left: 0; }
+  .step:not(:last-child)::after {
+    content: ""; position: absolute; right: -7px; top: 50%; width: 12px; height: 12px; z-index: 1;
+    background: var(--panel); border-top: 1px solid var(--line); border-right: 1px solid var(--line);
+    transform: translateY(-50%) rotate(45deg);
+  }
+  .step .k { font-size: 11px; font-weight: 600; letter-spacing: 0.06em; text-transform: uppercase; color: var(--ink-3); display: flex; align-items: center; gap: 7px; }
+  .step .v { font-size: 16px; font-weight: 600; margin-top: 4px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .step .s { font-size: 12.5px; color: var(--ink-2); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .step.hot { background: var(--bad-soft); }
+  .step.hot::after { background: var(--bad-soft); }
 
-  /* console bay */
-  .bay{position:relative;background:linear-gradient(180deg,var(--bay),var(--bay2));border:1px solid var(--rule);
-    border-radius:4px;padding:0;margin-bottom:18px;overflow:hidden}
-  .bay::before{content:"";position:absolute;left:0;top:0;bottom:0;width:2px;background:var(--rule2)}
-  .bay.online::before{background:var(--nominal)}
-  .bay.armed{border-color:#5a2420}
-  .bay.armed::before{background:var(--alarm);box-shadow:0 0 12px var(--alarmglow);animation:klaxon 1.6s infinite}
-  @keyframes klaxon{0%,100%{opacity:1}50%{opacity:.4}}
-  .pad{padding:15px 18px}
+  .dot { width: 8px; height: 8px; border-radius: 50%; background: var(--idle); flex: none; display: inline-block; }
+  .dot.ok { background: var(--ok); } .dot.warn { background: var(--warn); } .dot.bad { background: var(--bad); }
+  .dot.pulse { box-shadow: 0 0 0 0 var(--bad); animation: pulse 1.6s infinite; }
+  @keyframes pulse { 0% { box-shadow: 0 0 0 0 color-mix(in srgb, var(--bad) 60%, transparent); } 100% { box-shadow: 0 0 0 7px transparent; } }
 
-  .bay-hd{display:flex;align-items:baseline;gap:12px;border-bottom:1px solid var(--rule);}
-  .cs{font-size:17px;font-weight:700;letter-spacing:.02em}
-  .cs .stk{font-size:10px;letter-spacing:var(--ey);text-transform:uppercase;color:var(--faint);font-weight:600;margin-left:9px}
-  .stat{margin-left:auto;font-size:10px;letter-spacing:var(--ey);text-transform:uppercase;font-weight:700;
-    display:inline-flex;align-items:center;gap:6px;padding:4px 10px;border-radius:2px;border:1px solid var(--rule2)}
-  .stat.run{color:var(--nominal);border-color:#1d4a38;background:#0c2018}
-  .stat.idle{color:var(--faint)}
-  .stat.busy{color:var(--signal);border-color:#1c4652;background:#08222a}
+  .grid { display: grid; grid-template-columns: minmax(0, 1.6fr) minmax(0, 1fr); gap: 18px; align-items: start; }
+  .col { display: grid; gap: 18px; min-width: 0; }
+  section { background: var(--panel); border: 1px solid var(--line); border-radius: var(--radius); }
+  .hd { display: flex; align-items: center; gap: 10px; padding: 14px 18px; border-bottom: 1px solid var(--line-soft); }
+  .hd h2 { margin: 0; font-size: 14px; font-weight: 650; }
+  .hd .hint { color: var(--ink-3); font-size: 12.5px; }
+  .hd .actions { margin-left: auto; display: flex; gap: 8px; }
+  .empty { padding: 18px; color: var(--ink-3); }
 
-  /* plane LEDs */
-  .leds{display:flex;flex-wrap:wrap;gap:16px;padding:11px 18px;border-bottom:1px solid var(--rule);background:var(--inset)}
-  .led{font-size:10px;letter-spacing:.06em;text-transform:uppercase;color:var(--faint);display:inline-flex;align-items:center;gap:7px}
-  .led::before{content:"";width:7px;height:7px;border-radius:50%;background:#2a3446;box-shadow:none}
-  .led.up{color:var(--mute)} .led.up::before{background:var(--nominal);box-shadow:0 0 7px var(--nominal)}
-  .led.partial{color:var(--elevated)} .led.partial::before{background:var(--elevated);box-shadow:0 0 7px var(--elevated)}
-  .led.off{color:var(--faint)}
+  button { font: inherit; font-size: 13px; font-weight: 550; border-radius: 7px; padding: 6px 14px; cursor: pointer;
+    border: 1px solid var(--line); background: var(--panel); color: var(--ink); }
+  button:hover:not(:disabled) { border-color: var(--ink-3); }
+  button.primary { background: var(--accent); border-color: var(--accent); color: var(--accent-ink); }
+  button.primary:hover:not(:disabled) { filter: brightness(1.08); border-color: var(--accent); }
+  button.danger { color: var(--bad); }
+  button:disabled { opacity: 0.45; cursor: not-allowed; }
+  button.small { padding: 3px 10px; font-size: 12px; }
 
-  /* SIGNATURE — p99 vs SLO threshold gauge */
-  .gauge{padding:16px 18px 17px;border-bottom:1px solid var(--rule)}
-  .pnum{display:flex;align-items:baseline;gap:8px;margin:6px 0 11px}
-  .pnum .big{font-size:34px;font-weight:700;line-height:1;letter-spacing:-.01em}
-  .pnum .unit{font-size:13px;color:var(--mute)}
-  .pnum .slo{margin-left:auto;font-size:10px;letter-spacing:var(--ey);text-transform:uppercase;color:var(--faint)}
-  .pnum.nominal .big{color:var(--nominal)} .pnum.alarm .big{color:var(--alarm);text-shadow:0 0 20px var(--alarmglow)}
-  .pnum.off .big{color:var(--faint)}
-  .track{position:relative;height:8px;background:var(--inset);border:1px solid var(--rule);border-radius:2px}
-  .fill{position:absolute;left:0;top:0;bottom:0;border-radius:1px;transition:width .5s ease}
-  .fill.nominal{background:linear-gradient(90deg,#1d4a38,var(--nominal))}
-  .fill.alarm{background:linear-gradient(90deg,var(--elevated),var(--alarm))}
-  .slo-line{position:absolute;top:-4px;bottom:-4px;width:2px;background:var(--mute);opacity:.8}
-  .slo-line::after{content:"SLO";position:absolute;top:-13px;left:50%;transform:translateX(-50%);
-    font-size:8px;letter-spacing:.1em;color:var(--faint)}
-  .mark{position:absolute;top:50%;width:3px;height:16px;transform:translate(-50%,-50%);border-radius:1px}
-  .mark.nominal{background:var(--nominal)} .mark.alarm{background:var(--alarm);box-shadow:0 0 10px var(--alarm)}
-  .alarm-note{margin-top:12px;font-size:12px;color:#ffc7c2}
-  .alarm-note em{font-style:normal;color:#fff;background:#3a1613;border:1px solid #5a2420;border-radius:2px;padding:1px 7px}
+  .scn { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 6px 16px; padding: 16px 18px; border-top: 1px solid var(--line-soft); }
+  .scn:first-of-type { border-top: 0; }
+  .scn.on { background: var(--bad-soft); box-shadow: inset 3px 0 0 var(--bad); }
+  .scn h3 { margin: 0; font-size: 14.5px; font-weight: 620; display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+  .scn p { margin: 0; color: var(--ink-2); grid-column: 1; }
+  .scn .meta { grid-column: 1; display: flex; gap: 14px; flex-wrap: wrap; color: var(--ink-3); font-size: 12.5px; }
+  .scn .btn { grid-row: 1 / span 3; grid-column: 2; align-self: center; text-align: right; }
+  .scn .btn small { display: block; color: var(--ink-3); font-size: 11.5px; margin-top: 4px; max-width: 150px; }
+  .badge { font-size: 11px; font-weight: 600; letter-spacing: 0.03em; border-radius: 99px; padding: 1px 8px; background: var(--line-soft); color: var(--ink-2); }
+  .badge.bad { background: var(--bad); color: #fff; }
+  .badge.ok { background: var(--ok-soft); color: var(--ok); }
+  .badge.warn { background: var(--warn-soft); color: var(--warn); }
 
-  /* controls */
-  .ctl{padding:14px 18px;border-bottom:1px solid var(--rule)}
-  .acts{display:flex;gap:7px;flex-wrap:wrap;align-items:center;margin-top:8px}
-  .grp{display:flex;gap:6px;align-items:center;padding-right:9px;margin-right:2px;border-right:1px solid var(--rule)}
-  .grp:last-child{border-right:none}
-  button{font-family:var(--mono);font-size:11px;font-weight:600;letter-spacing:.04em;text-transform:uppercase;
-    padding:7px 12px;border-radius:2px;border:1px solid var(--rule2);background:#141b28;color:var(--ink);cursor:pointer;transition:.12s}
-  button:hover:not(:disabled){border-color:var(--signal);color:#fff;background:#0e1a24}
-  button:disabled{opacity:.35;cursor:not-allowed}
-  button.go{color:var(--nominal);border-color:#1d4a38}
-  button.go:hover:not(:disabled){border-color:var(--nominal);background:#0c2018}
-  button.warn{color:var(--alarm);border-color:#5a2420}
-  button.warn:hover:not(:disabled){border-color:var(--alarm);background:#26100e}
-  select,label.mcp{font-family:var(--mono);font-size:11px;color:var(--mute);background:var(--inset);
-    border:1px solid var(--rule2);border-radius:2px;padding:6px 8px}
-  label.mcp{display:inline-flex;align-items:center;gap:6px;cursor:pointer;text-transform:uppercase;letter-spacing:.06em;font-size:10px}
+  .alert { padding: 14px 18px; border-top: 1px solid var(--line-soft); display: grid; grid-template-columns: auto minmax(0, 1fr) auto; gap: 2px 12px; align-items: center; }
+  .alert:first-of-type { border-top: 0; }
+  .alert .name { font-weight: 620; }
+  .alert .sum { grid-column: 2; color: var(--ink-2); }
+  .alert .age { font-variant-numeric: tabular-nums; color: var(--bad); font-weight: 600; }
 
-  /* detail — consoles + log */
-  .det{padding:14px 18px}
-  .links{display:flex;flex-wrap:wrap;gap:7px;margin:7px 0 0}
-  .lnk{font-size:11px;color:var(--signal);border:1px solid var(--rule2);border-radius:2px;padding:5px 10px;background:var(--inset)}
-  .lnk:hover{border-color:var(--signal)}
-  .lnk.down{color:var(--faint);border-color:var(--rule);background:transparent;cursor:not-allowed;text-decoration:line-through;opacity:.55}
-  table{width:100%;border-collapse:collapse;font-size:11.5px;margin-top:7px}
-  th,td{text-align:left;padding:5px 9px;border-bottom:1px solid var(--rule)}
-  th{color:var(--faint);font-weight:600;font-size:9.5px;letter-spacing:var(--ey);text-transform:uppercase}
-  td.id{color:var(--mute)} .vp{color:var(--nominal);font-weight:700} .vf{color:var(--alarm);font-weight:700}
+  .svc { display: flex; align-items: center; gap: 10px; padding: 8px 18px; border-top: 1px solid var(--line-soft); }
+  .svc:first-of-type { border-top: 0; }
+  .svc .n { font-family: var(--mono); font-size: 12.5px; }
+  .svc .st { margin-left: auto; color: var(--ink-3); font-size: 12.5px; }
+  .svcs { padding: 6px 0; }
 
-  /* live log — instrument readout */
-  .log{display:none;margin:0 18px 16px;border:1px solid var(--rule2);border-radius:3px;overflow:hidden}
-  .log.open{display:block}
-  .logh{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:7px 11px;
-    background:var(--inset);border-bottom:1px solid var(--rule);font-size:11px}
-  .logh .cmd{color:var(--faint)}
-  .logh .x{border:none;background:transparent;color:var(--mute);font-size:15px;cursor:pointer;padding:0 4px}
-  .logh .x:hover{color:#fff}
-  .logb{background:#06090f;padding:11px 12px;font-size:11.5px;line-height:1.55;white-space:pre-wrap;
-    max-height:290px;overflow:auto;color:#c6d0e0}
-  .lbadge{font-size:10px;font-weight:700;letter-spacing:.06em;padding:2px 8px;border-radius:2px}
-  .lbadge.okb{color:var(--nominal);border:1px solid #1d4a38;background:#0c2018}
-  .lbadge.failb{color:var(--alarm);border:1px solid #5a2420;background:#26100e}
+  dl { margin: 0; padding: 8px 18px 16px; }
+  dt { font-size: 11px; font-weight: 600; letter-spacing: 0.06em; text-transform: uppercase; color: var(--ink-3); margin-top: 12px; }
+  dd { margin: 3px 0 0; min-width: 0; }
+  .links { display: grid; grid-template-columns: 1fr 1fr; gap: 6px 14px; }
+  .links a { display: flex; justify-content: space-between; gap: 8px; padding: 6px 10px; border: 1px solid var(--line); border-radius: 7px; color: var(--ink); }
+  .links a:hover { border-color: var(--accent); text-decoration: none; }
+  .links a span { color: var(--ink-3); font-family: var(--mono); font-size: 11.5px; }
+  .copyrow { display: flex; align-items: center; gap: 8px; }
+  .coderow + .coderow { margin-top: 10px; }
+  .copyrow code { flex: 1; min-width: 0; overflow-wrap: anywhere; background: var(--line-soft); border-radius: 6px; padding: 5px 8px; }
+  .explain { color: var(--ink-3); font-size: 12px; margin-top: 3px; }
 
-  .spin{width:10px;height:10px;border-radius:50%;border:2px solid rgba(87,208,230,.25);border-top-color:var(--signal);
-    display:inline-block;animation:spin .7s linear infinite}
-  @keyframes spin{to{transform:rotate(360deg)}}
-  .empty{color:var(--faint);text-align:center;padding:56px;letter-spacing:.04em}
-  .toast{position:fixed;bottom:22px;left:50%;transform:translateX(-50%);background:#26100e;color:#ffc7c2;
-    border:1px solid #5a2420;border-radius:3px;padding:9px 15px;font-size:12px;opacity:0;transition:opacity .2s;pointer-events:none}
-  .toast.show{opacity:1}
-  @media (prefers-reduced-motion: reduce){*{animation:none !important;transition:none !important}}
+  .log { margin-top: 18px; background: var(--term-bg); border-radius: var(--radius); overflow: hidden; }
+  .log .hd { border-bottom: 1px solid #ffffff14; color: var(--term-ink); }
+  .log .hd h2 { color: var(--term-ink); }
+  .log .hd .hint { color: var(--term-dim); }
+  .log pre { margin: 0; padding: 14px 18px; height: 240px; overflow: auto; color: var(--term-ink); font: 12.5px/1.55 var(--mono); white-space: pre-wrap; overflow-wrap: anywhere; }
+  .log pre .cmd { color: #9fb4ff; }
+  .log pre .idle { color: var(--term-dim); }
+
+  .toast { position: fixed; left: 50%; bottom: 22px; transform: translateX(-50%) translateY(20px); opacity: 0; pointer-events: none;
+    background: var(--ink); color: var(--bg); padding: 10px 16px; border-radius: 8px; font-size: 13px; transition: 0.2s; max-width: 90vw; }
+  .toast.show { opacity: 1; transform: translateX(-50%); }
+  .toast.bad { background: var(--bad); color: #fff; }
+
+  @media (max-width: 860px) {
+    .grid { grid-template-columns: 1fr; }
+    .flow { grid-template-columns: 1fr 1fr; gap: 8px; }
+    .step, .step:first-child, .step:last-child { border-radius: var(--radius); border-left: 1px solid var(--line); }
+    .step::after { display: none; }
+  }
+  @media (max-width: 520px) {
+    .wrap { padding: 20px 16px 40px; }
+    .flow { grid-template-columns: 1fr; }
+    .links { grid-template-columns: 1fr; }
+    .scn { grid-template-columns: 1fr; }
+    .scn .btn { grid-row: auto; grid-column: 1; text-align: left; }
+  }
 </style>
 </head>
 <body>
-<header>
-  <div class="brand">SREForge<span class="sep">/</span><b>Control</b></div>
-  <div class="rail">
-    <span class="tag">loopback · not agent-reachable</span>
-    <a class="doclink" href="https://sreforge.sfun.cloud/" target="_blank" rel="noreferrer">docs ↗</a>
-    <span class="beat"><i></i><span id="updated">connecting…</span></span>
+<div class="wrap">
+  <header>
+    <div>
+      <h1>sreforge</h1>
+      <p class="lede">A test environment for SRE agents such as prismalens. Bring the stack up, switch on a fault, and a real alert fires and reaches the agent through Alertmanager.</p>
+    </div>
+    <div class="updated"><span class="dot" id="live"></span><span id="updated">connecting…</span></div>
+  </header>
+
+  <div class="flow" id="flow"></div>
+
+  <div class="grid">
+    <div class="col">
+      <section>
+        <div class="hd"><h2>Faults</h2><span class="hint">One at a time. Turning one on switches the current one off first.</span></div>
+        <div id="scenarios"><div class="empty">Loading…</div></div>
+      </section>
+      <section>
+        <div class="hd"><h2>Firing alerts</h2><span class="hint" id="alert-hint"></span></div>
+        <div id="alerts"><div class="empty">Loading…</div></div>
+      </section>
+    </div>
+    <div class="col">
+      <section>
+        <div class="hd"><h2>Stack</h2><span id="stack-badge"></span>
+          <div class="actions">
+            <button class="primary" data-action="up">Up</button>
+            <button class="danger" data-action="down">Down</button>
+          </div>
+        </div>
+        <div id="stack" class="svcs"><div class="empty">Loading…</div></div>
+      </section>
+      <section>
+        <div class="hd"><h2>Where things are</h2></div>
+        <dl id="where"><dd class="empty">Loading…</dd></dl>
+      </section>
+    </div>
   </div>
-</header>
-<main><div id="root"><div class="empty">acquiring telemetry…</div></div></main>
-<div class="toast" id="toast"></div>
+
+  <section class="log">
+    <div class="hd"><h2>Output</h2><span class="hint" id="log-label">no command run yet</span></div>
+    <pre id="log"><span class="idle">Output from Up, Down and fault switches streams here.</span></pre>
+  </section>
+</div>
+<div class="toast" id="toast" role="status"></div>
 
 <script>
-const PROVIDERS = ["local", "anthropic", "openai", "google", "ollama-cloud"];
-const SLO_MS = 300, SCALE_MS = 600; // gauge track spans 0..2×SLO; SLO line at 50%
-const seen = new Set();
-const streams = {};
-let lastTs = 0;
-
 const $ = (id) => document.getElementById(id);
-const el = (h) => { const t = document.createElement("template"); t.innerHTML = h.trim(); return t.content.firstElementChild; };
-const esc = (s) => String(s ?? "").replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
-const pos = (ms) => Math.max(0, Math.min(ms / SCALE_MS, 1)) * 100;
+const LINK_NAMES = { app: "Booklogr app", api: "Booklogr API", prometheus: "Prometheus", alertmanager: "Alertmanager", grafana: "Grafana" };
+let status = null;
+let busy = false;
+let lastOk = 0;
 
-function toast(m) { const t = $("toast"); t.textContent = m; t.classList.add("show"); setTimeout(() => t.classList.remove("show"), 3200); }
-
-function ensureCard(u) {
-  const uc = u.useCase;
-  if (seen.has(uc)) return;
-  seen.add(uc);
-  const card = el(`
-    <article class="bay" id="card-${uc}">
-      <div class="pad bay-hd"><div class="cs">${esc(uc)}<span class="stk">${esc(u.stack)}</span></div><div id="chip-${uc}"></div></div>
-      <div class="leds" id="planes-${uc}"></div>
-      <div class="gauge" id="gauge-${uc}"></div>
-      <div class="ctl">
-        <div class="ey">Lifecycle <a class="ref" href="https://sreforge.sfun.cloud/reference/cli/" target="_blank" rel="noreferrer">cli ↗</a></div>
-        <div class="acts">
-          <div class="grp">
-            <button data-v="fresh" class="go" title="Cold start — import the substrate + bring up the deploy plane">Fresh</button>
-            <button data-v="up" title="Bring up the deploy plane (app + Prometheus / Alertmanager / Grafana)">Up</button>
-          </div>
-          <div class="grp"><button data-v="arm" title="Inject the incident and confirm the alert fires">Arm</button></div>
-          <div class="grp">
-            <select id="prov-${uc}" title="Model provider → sets the agent box's egress allowlist">${PROVIDERS.map((p) => `<option>${p}</option>`).join("")}</select>
-            <label class="mcp" title="Also bring up the read-only MCP telemetry seam"><input type="checkbox" id="mcp-${uc}"> MCP</label>
-            <button data-v="agent" class="go" title="Bring up the sealed agent sandbox for the selected provider">Agent</button>
-          </div>
-          <div class="grp">
-            <button data-v="run" class="go" title="Grade one incident end-to-end (external agent runner)">Run</button>
-            <button data-v="verify" title="Run the boundary / egress / alert-pickup / MCP probes">Verify</button>
-          </div>
-          <div class="grp"><button data-v="down" class="warn" title="Tear down the deploy + load planes">Down</button></div>
-        </div>
-      </div>
-      <div class="det" id="det-${uc}"></div>
-      <div class="log" id="log-${uc}"><div class="logh" id="logh-${uc}"></div><div class="logb" id="logb-${uc}"></div></div>
-    </article>`);
-  card.querySelectorAll("button[data-v]").forEach((b) => (b.onclick = () => invoke(uc, b.dataset.v)));
-  $("root").appendChild(card);
+function h(tag, props = {}, ...kids) {
+  const el = document.createElement(tag);
+  for (const [k, v] of Object.entries(props)) {
+    if (v == null || v === false) continue;
+    if (k === "class") el.className = v;
+    else if (k.startsWith("on")) el.addEventListener(k.slice(2), v);
+    else if (k in el && k !== "list") el[k] = v;
+    else el.setAttribute(k, v);
+  }
+  for (const kid of kids.flat()) if (kid != null && kid !== false) el.append(kid);
+  return el;
 }
 
-function ledsHtml(s) {
-  if (!s.planes) return `<span class="led off">docker offline</span>`;
-  return s.planes.map((p) => `<span class="led ${p.tag === "up" ? "up" : p.tag === "partial" ? "partial" : "off"}">${esc(p.name)}${p.detail ? " " + esc(p.detail) : ""}</span>`).join("");
+function age(iso) {
+  const s = Math.max(0, Math.floor((Date.now() - Date.parse(iso)) / 1000));
+  if (!Number.isFinite(s)) return "";
+  if (s < 60) return `${s}s`;
+  const m = Math.floor(s / 60);
+  if (m < 60) return `${m}m ${String(s % 60).padStart(2, "0")}s`;
+  return `${Math.floor(m / 60)}h ${String(m % 60).padStart(2, "0")}m`;
 }
-function gaugeHtml(s) {
-  const i = s.incident || {};
-  if (!i.reachable)
-    return `<div class="ey">p99 latency</div><div class="pnum off"><span class="big">—</span><span class="slo">telemetry offline</span></div>
-      <div class="track"><div class="slo-line" style="left:50%"></div></div>`;
-  const ms = i.p99ms;
-  const firing = !!i.primaryFiring;
-  const cls = firing ? "alarm" : "nominal";
-  const p = ms == null ? 0 : pos(ms);
-  let h = `<div class="ey">p99 latency</div>
-    <div class="pnum ${cls}"><span class="big">${ms == null ? "n/a" : ms}</span><span class="unit">ms</span><span class="slo">threshold ${SLO_MS}ms</span></div>
-    <div class="track"><div class="fill ${cls}" style="width:${p}%"></div><div class="slo-line" style="left:50%"></div><div class="mark ${cls}" style="left:${p}%"></div></div>`;
-  if (firing) h += `<div class="alarm-note">▲ <b>${esc(i.primary)}</b> firing — hand the agent: <em>"${esc(i.suggest)}"</em></div>`;
-  return h;
-}
-function detHtml(s) {
-  let h = "";
-  if (s.links && s.links.length) h += `<div class="ey">consoles</div><div class="links">${s.links.map((l) => l.up
-    ? `<a class="lnk" href="${esc(l.url)}" target="_blank" rel="noreferrer">${esc(l.name)} ↗</a>`
-    : `<span class="lnk down" title="not running">${esc(l.name)}</span>`).join("")}</div>`;
-  if (s.runs && s.runs.length) h += `<div class="ey" style="margin-top:14px">recent runs</div><table><tr><th>run</th><th>verdict</th><th>score</th><th>scenario</th></tr>${s.runs.map((r) => `<tr><td class="id">${esc(r.runId)}</td><td class="${r.verdict === "passed" ? "vp" : "vf"}">${esc(r.verdict)}</td><td>${r.score != null ? Number(r.score).toFixed(2) : "—"}</td><td class="id">${esc(r.scenario || "")}</td></tr>`).join("")}</table>`;
-  return h || `<div class="ey">consoles</div><div class="led off" style="margin-top:6px">offline</div>`;
+const since = (iso, prefix = "") => h("span", { "data-since": iso, "data-prefix": prefix }, prefix + age(iso));
+
+let toastTimer;
+function toast(msg, bad = false) {
+  const t = $("toast");
+  t.textContent = msg;
+  t.className = `toast show${bad ? " bad" : ""}`;
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => (t.className = "toast"), bad ? 6000 : 2500);
 }
 
-function updateCard(u) {
-  const uc = u.useCase, s = u.status || {};
-  const up = (s.planes || []).some((p) => p.tag === "up");
-  const firing = !!(s.incident && s.incident.reachable && s.incident.primaryFiring);
-  $("chip-" + uc).outerHTML = `<div id="chip-${uc}" class="stat ${u.busy ? "busy" : up ? "run" : "idle"}">${u.busy ? `<span class="spin"></span>${esc(u.busy.verb)}` : up ? "online" : "offline"}</div>`;
-  $("planes-" + uc).innerHTML = ledsHtml(s);
-  $("gauge-" + uc).innerHTML = gaugeHtml(s);
-  $("det-" + uc).innerHTML = detHtml(s);
-  const card = $("card-" + uc);
-  card.classList.toggle("online", up && !firing);
-  card.classList.toggle("armed", firing);
-  card.querySelectorAll("button[data-v]").forEach((b) => (b.disabled = !!u.busy));
-  $("prov-" + uc).disabled = !!u.busy;
-  $("mcp-" + uc).disabled = !!u.busy;
+function stackState(stack) {
+  if (!stack?.length) return { key: "down", label: "Down", cls: "" };
+  const running = stack.filter((s) => s.state === "running").length;
+  const sick = stack.some((s) => s.health === "unhealthy");
+  if (running === stack.length && !sick) return { key: "up", label: "Up", cls: "ok", running };
+  return { key: "partial", label: "Degraded", cls: "warn", running };
 }
 
-async function invoke(uc, verb) {
-  const args = [];
-  if (verb === "agent") { args.push("PROVIDER=" + $("prov-" + uc).value); if ($("mcp-" + uc).checked) args.push("MCP=on"); }
-  if (verb === "run") args.push("RUNNER=external");
-  let j;
-  try {
-    const r = await fetch("/api/invoke", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ useCase: uc, verb, args }) });
-    j = await r.json();
-    if (!r.ok) { toast(j.error || "invoke failed"); return; }
-  } catch (e) { toast("invoke failed: " + e.message); return; }
-  openLog(uc, j.id, verb, args);
-  refresh();
+function renderFlow(s) {
+  const st = stackState(s.stack);
+  const fault = s.fault && s.scenarios.find((x) => x.id === s.fault.scenario);
+  const firing = s.alerts.filter((a) => a.state === "firing");
+  const pl = { sent: 0, failed: 0, ...s.receiver };
+  const step = (n, key, dot, value, sub, hot) =>
+    h("div", { class: `step${hot ? " hot" : ""}` },
+      h("div", { class: "k" }, h("span", { class: `dot ${dot}` }), `${n} · ${key}`),
+      h("div", { class: "v" }, value),
+      h("div", { class: "s" }, sub));
+  $("flow").replaceChildren(
+    step(1, "Stack", st.cls, st.label, st.key === "down" ? "nothing running" : `${st.running} of ${s.stack.length} services running`),
+    step(2, "Fault", fault ? "bad" : "", fault ? fault.title : "None", fault ? since(s.fault.since, "on for ") : "the app is healthy", !!fault),
+    step(3, "Alert", firing.length ? "bad pulse" : "", firing.length ? `${firing.length} firing` : "Quiet",
+      firing.length ? firing.map((a) => a.name).join(", ") : "no alerts firing", firing.length > 0),
+    step(4, "Agent", pl.failed ? "bad" : pl.sent ? "ok" : "",
+      pl.failed ? "Delivery failing" : pl.sent ? "Received" : "Nothing sent yet",
+      `${pl.sent} sent · ${pl.failed} failed (Alertmanager's count)`),
+  );
 }
-function openLog(uc, id, verb, args) {
-  $("log-" + uc).classList.add("open");
-  const head = $("logh-" + uc), body = $("logb-" + uc);
-  const cmd = `pnpm forge ${verb} ${uc} ${args.join(" ")}`.trim();
-  head.innerHTML = `<span><span class="spin"></span> ${esc(verb)} <span class="cmd">${esc(cmd)}</span></span><button class="x" title="close" onclick="closeLog('${uc}')">×</button>`;
-  body.textContent = "";
-  if (streams[uc]) streams[uc].close();
-  const es = new EventSource("/api/stream/" + id);
-  streams[uc] = es;
-  es.onmessage = (e) => { body.textContent += JSON.parse(e.data).line; body.scrollTop = body.scrollHeight; };
-  es.addEventListener("done", (e) => {
-    const code = JSON.parse(e.data).code;
-    head.innerHTML = `<span>${esc(verb)} <span class="lbadge ${code === 0 ? "okb" : "failb"}">exit ${code}</span></span><button class="x" title="close" onclick="closeLog('${uc}')">×</button>`;
-    es.close(); refresh();
+
+function renderScenarios(s) {
+  const up = stackState(s.stack).key !== "down";
+  const current = s.fault?.scenario;
+  const currentTitle = s.scenarios.find((x) => x.id === current)?.title || current;
+  if (!s.scenarios.length) return $("scenarios").replaceChildren(h("div", { class: "empty" }, "No scenarios defined."));
+  $("scenarios").replaceChildren(...s.scenarios.map((x) => {
+    const on = x.id === current;
+    const firing = s.alerts.some((a) => a.name === x.alert && a.state === "firing");
+    let note = null;
+    if (!up) note = "Bring the stack up first";
+    else if (!on && current) note = `Turns off ${currentTitle} first`;
+    return h("div", { class: `scn${on ? " on" : ""}` },
+      h("h3", {}, x.title, on && h("span", { class: "badge bad" }, "ON"), on && h("span", { class: "hint mono", style: "color:var(--ink-3);font-weight:400" }, since(s.fault.since))),
+      h("p", {}, x.description),
+      h("div", { class: "meta" },
+        h("span", {}, "fires ", h("code", {}, x.alert), firing ? h("span", { class: "badge bad", style: "margin-left:6px" }, "firing") : null),
+        h("span", { class: "mono" }, x.id)),
+      h("div", { class: "btn" },
+        on
+          ? h("button", { disabled: busy, onclick: () => run({ action: "fault", scenario: x.id, on: false }) }, "Turn off")
+          : h("button", { class: "primary", disabled: busy || !up, onclick: () => run({ action: "fault", scenario: x.id, on: true }) }, "Turn on"),
+        note && h("small", {}, note)));
+  }));
+}
+
+function renderAlerts(s) {
+  const firing = s.alerts.filter((a) => a.state === "firing");
+  const pending = s.alerts.length - firing.length;
+  $("alert-hint").textContent = pending ? `${pending} pending` : "";
+  if (!firing.length) {
+    return $("alerts").replaceChildren(h("div", { class: "empty" }, s.fault ? "Nothing firing yet. Alerts usually take a minute or two after a fault goes on." : "Nothing firing. Turn on a fault to make one fire."));
+  }
+  $("alerts").replaceChildren(...firing.map((a) =>
+    h("div", { class: "alert" },
+      h("span", { class: "dot bad pulse" }),
+      h("div", {}, h("span", { class: "name" }, a.name), " ", h("span", { class: "badge" }, a.service)),
+      h("span", { class: "age", title: `firing since ${a.since}` }, since(a.since)),
+      a.summary && h("div", { class: "sum" }, a.summary))));
+}
+
+function renderStack(s) {
+  const st = stackState(s.stack);
+  $("stack-badge").replaceChildren(h("span", { class: `badge ${st.cls}` }, st.label));
+  document.querySelector('[data-action="up"]').disabled = busy;
+  document.querySelector('[data-action="down"]').disabled = busy || st.key === "down";
+  if (!s.stack.length) return $("stack").replaceChildren(h("div", { class: "empty" }, "Nothing is running. Press Up to start the stack; the first start can take a few minutes."));
+  $("stack").replaceChildren(...s.stack.map((x) => {
+    const cls = x.state !== "running" || x.health === "unhealthy" ? "bad" : x.health === "starting" ? "warn" : "ok";
+    return h("div", { class: "svc" }, h("span", { class: `dot ${cls}` }), h("span", { class: "n" }, x.service),
+      h("span", { class: "st" }, [x.state, x.health].filter(Boolean).join(" · ")));
+  }));
+}
+
+function copyRow(text) {
+  return h("div", { class: "copyrow" }, h("code", {}, text),
+    h("button", { class: "small", onclick: () => navigator.clipboard?.writeText(text).then(() => toast("Copied")) }, "Copy"));
+}
+
+function renderWhere(s) {
+  const links = Object.entries(s.links || {});
+  const code = (s.code || []).map((c) => {
+    const [sha, ...msg] = (c.head || "").split(" ");
+    return h("div", { class: "coderow" },
+      h("div", { class: "explain" }, h("b", {}, c.service)),
+      copyRow(c.path),
+      h("div", { class: "explain" }, sha ? h("span", {}, "HEAD ", h("code", {}, sha), " ", msg.join(" ")) : "not set up yet"));
   });
+  $("where").replaceChildren(
+    h("dt", {}, "Open"),
+    h("dd", {}, h("div", { class: "links" }, links.map(([k, url]) =>
+      h("a", { href: url, target: "_blank", rel: "noopener" }, LINK_NAMES[k] || k, h("span", {}, url.replace(/^https?:\/\/(localhost)?/, "")))))),
+    h("dt", {}, "Code, by alert service label"),
+    h("dd", {}, ...code,
+      h("div", { class: "explain" }, "Register each service with the agent under this folder, never a folder inside sreforge.")),
+    h("dt", {}, "Agent webhook"),
+    h("dd", {}, copyRow(s.receiver?.url || "not configured"),
+      h("div", { class: "explain" }, "Where Alertmanager posts every alert.")),
+  );
 }
-function closeLog(uc) { $("log-" + uc).classList.remove("open"); if (streams[uc]) streams[uc].close(); }
+
+function render() {
+  if (!status) return;
+  busy = !!status.job?.running;
+  renderFlow(status);
+  renderScenarios(status);
+  renderAlerts(status);
+  renderStack(status);
+  renderWhere(status);
+}
 
 async function refresh() {
-  let st;
-  try { st = await (await fetch("/api/state")).json(); } catch { $("updated").textContent = "signal lost"; return; }
-  const present = new Set();
-  for (const u of st.useCases) { present.add(u.useCase); ensureCard(u); updateCard(u); }
-  for (const uc of [...seen]) if (!present.has(uc)) { $("card-" + uc)?.remove(); seen.delete(uc); }
-  if (!st.useCases.length) $("root").innerHTML = `<div class="empty">no use-cases under use-cases/</div>`;
-  lastTs = Date.now();
+  try {
+    const res = await fetch("/api/status");
+    const body = await res.json();
+    if (!res.ok) throw new Error(body.error || res.statusText);
+    status = body;
+    lastOk = Date.now();
+    $("live").className = "dot ok";
+    render();
+  } catch (e) {
+    $("live").className = "dot bad";
+    $("updated").textContent = `status failed: ${e.message}`;
+  }
 }
-setInterval(() => { if (lastTs) { const s = Math.round((Date.now() - lastTs) / 1000); $("updated").textContent = s < 2 ? "live" : `${s}s ago`; } }, 1000);
+
+async function run(body) {
+  const res = await fetch("/api/run", { method: "POST", body: JSON.stringify(body) });
+  const out = await res.json().catch(() => ({}));
+  if (!res.ok) return toast(out.error || res.statusText, true);
+  busy = true;
+  render();
+}
+
+document.querySelectorAll("[data-action]").forEach((b) => b.addEventListener("click", () => {
+  if (b.dataset.action === "down" && !confirm("Stop the whole stack?")) return;
+  run({ action: b.dataset.action });
+}));
+
+const logEl = $("log");
+function append(text, cls) {
+  const stick = logEl.scrollHeight - logEl.scrollTop - logEl.clientHeight < 24;
+  const clean = text.replace(/\x1b\[[0-9;]*[A-Za-z]/g, "");
+  logEl.append(cls ? h("span", { class: cls }, clean) : clean);
+  if (stick) logEl.scrollTop = logEl.scrollHeight;
+}
+function connectLog() {
+  const es = new EventSource("/api/log");
+  es.addEventListener("start", (e) => {
+    const j = JSON.parse(e.data);
+    logEl.replaceChildren();
+    $("log-label").textContent = `${j.label} · running`;
+    busy = j.running;
+    render();
+  });
+  es.addEventListener("line", (e) => {
+    const { line } = JSON.parse(e.data);
+    append(line, line.startsWith("$ ") ? "cmd" : null);
+  });
+  es.addEventListener("done", (e) => {
+    const j = JSON.parse(e.data);
+    $("log-label").textContent = `${j.label} · ${j.code === 0 ? "finished" : `failed (exit ${j.code})`}`;
+    append(`\n${j.code === 0 ? "✓ finished" : `✗ exited ${j.code}`}\n`, "idle");
+    if (busy) toast(j.code === 0 ? `${j.label}: done` : `${j.label}: failed (exit ${j.code})`, j.code !== 0);
+    busy = false;
+    refresh();
+  });
+}
+
+setInterval(() => {
+  document.querySelectorAll("[data-since]").forEach((el) => (el.textContent = el.dataset.prefix + age(el.dataset.since)));
+  if (lastOk) $("updated").textContent = `updated ${Math.round((Date.now() - lastOk) / 1000)}s ago`;
+}, 1000);
+setInterval(() => { if (document.visibilityState === "visible") refresh(); }, 4000);
+document.addEventListener("visibilitychange", () => { if (document.visibilityState === "visible") refresh(); });
+connectLog();
 refresh();
-setInterval(refresh, 5000);
 </script>
 </body>
 </html>

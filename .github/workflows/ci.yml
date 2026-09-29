@@ -5,11 +5,6 @@ on:
     branches: [main]
   pull_request:
     branches: [main]
-  # Merge-queue support (#403): the queue builds a speculative merge of the
-  # queued PR(s) onto main and requires `CI gate` to pass on THAT commit, which
-  # is what lets the ruleset drop "branch must be up to date" without letting
-  # two individually-green PRs break main together. Every job in this file is
-  # event-agnostic, so no job-level changes are needed — the trigger is enough.
   merge_group:
 
 permissions:
@@ -20,133 +15,39 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  # Build (and, when present, test) the engine in core/. core/ carries its own
-  # pnpm-lock.yaml and builds independently — the repo root is intentionally not a
-  # single installable workspace yet, so we install per-package here.
-  build:
-    name: build core
+  checks:
+    name: checks
     runs-on: ubuntu-latest
-    strategy:
-      fail-fast: false
-      matrix:
-        node-version: [20, 22]
     steps:
       - uses: actions/checkout@v7
-
-      # action-setup reads the pnpm version from the root package.json
-      # `packageManager` field, so no version is pinned here (pinning both errors).
-      - name: Setup pnpm
-        uses: pnpm/action-setup@v6
-
-      - name: Setup Node ${{ matrix.node-version }}
-        uses: actions/setup-node@v7
         with:
-          node-version: ${{ matrix.node-version }}
+          persist-credentials: false
+      - uses: pnpm/action-setup@v6
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22
           cache: pnpm
-          cache-dependency-path: core/pnpm-lock.yaml
-
-      - name: Install core deps
-        working-directory: core
-        run: pnpm install --frozen-lockfile
-
-      - name: Build core
-        working-directory: core
-        run: pnpm build
-
-      # Runs the suite once core ships a `test` script; until then it no-ops so the
-      # check stays green. Skip-on-absent is acceptable for a young repo and is
-      # clearly logged.
-      - name: Test core (if a test script exists)
-        working-directory: core
-        run: |
-          if node -e "const p=require('./package.json');process.exit(p.scripts&&p.scripts.test?0:1)"; then
-            pnpm test
-          else
-            echo "No core test script on this ref — skipping."
-          fi
-
-  rules-lint:
-    name: rules-lint
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v7
-        with:
-          persist-credentials: false
-      - uses: actions/setup-node@v6
-        with:
-          node-version: 22
-      - name: Lint alert rules for service labels
-        run: node tools/rules-lint/lint.mjs
-
-  # Enforces the ADR-0026 §7 public/private boundary from the public side: no
-  # transcript-bearing record may be committed here. bank.mjs guards the private
-  # store; this guards the repo. Both halves must run or the boundary is one-sided.
-  record-lint:
-    name: record-lint
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v7
-        with:
-          persist-credentials: false
-      - uses: actions/setup-node@v6
-        with:
-          node-version: 22
-      # The guard's own tests run here too: the repo's tools/ suites are not
-      # otherwise wired into CI, and an unverified boundary check is not a check.
-      - name: Test the record boundary lint
-        run: node --test tools/record-lint/test/*.test.mjs
-      - name: Lint committed records for transcript content
-        run: node tools/record-lint/lint.mjs
-      # The public scenario catalog is the other half of the same boundary: a
-      # generated page that may carry scenario IDENTITY only — never headroom
-      # numbers, oracle rubrics or solution wording. A stale committed page is
-      # therefore a boundary regression, not a docs nit, and belongs in this job.
-      # `node` rather than `pnpm` to match the rest of this job, which has no pnpm
-      # setup; locally these are `pnpm test:catalog` and `pnpm catalog:check`.
-      - name: Test the catalog generator (incl. leakage assertions)
-        run: node --test tools/catalog/test/*.test.mjs
-      - name: Check the generated scenario catalog is not stale
-        run: node tools/catalog/generate.mjs --check
-
-  tools-tests:
-    name: tools tests
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v7
-        with:
-          persist-credentials: false
-
-      # action-setup reads the pnpm version from the root package.json
-      # `packageManager` field, so no version is pinned here (pinning both errors).
-      - name: Setup pnpm
-        uses: pnpm/action-setup@v6
-
-      - uses: actions/setup-node@v6
-        with:
-          node-version: 22
-
-      - name: Install core deps
-        working-directory: core
-        run: pnpm install --frozen-lockfile
-
-      # Tool suites import core/dist, so the build must precede them.
-      - name: Build core
-        working-directory: core
-        run: pnpm build
-
-      - name: Run tools tests
+      - run: pnpm install --frozen-lockfile
+      - name: Alert rules carry a service label
+        run: pnpm rules-lint
+      - name: Tests
         run: pnpm test
+      - name: Compose file and Alertmanager config parse
+        working-directory: use-cases/booklogr/stacks/flask-compose
+        run: |
+          touch compose/.env && mkdir -p .secrets
+          docker compose -f compose/docker-compose.yml --profile load config --quiet
+          printf 'http://example.invalid/' > .secrets/webhook-url && printf 'x' > .secrets/webhook-token
+          docker run --rm --entrypoint amtool -v "$PWD/observability:/c:ro" -v "$PWD/.secrets:/etc/alertmanager/secrets:ro" \
+            prom/alertmanager:v0.28.0 check-config /c/alertmanager.yml
 
-  # Single stable status check to require in branch protection, independent of how
-  # the matrix above expands.
+  # The ruleset requires this name.
   gate:
     name: CI gate
     if: always()
-    needs: [build, rules-lint, record-lint, tools-tests]
+    needs: [checks]
     runs-on: ubuntu-latest
     steps:
-      - name: Fail if any required job did not succeed
-        if: contains(needs.*.result, 'failure') || contains(needs.*.result, 'cancelled')
+      - if: contains(needs.*.result, 'failure') || contains(needs.*.result, 'cancelled')
         run: exit 1
-      - name: Pass
-        run: echo "All CI jobs succeeded."
+      - run: echo "All CI jobs succeeded."

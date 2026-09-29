@@ -1,7 +1,7 @@
 FROM python:3.12-slim
 WORKDIR /app
-# prometheus_client: harness observability for the provider (in-flight gauge,
-# request counter, duration histogram) exposed on /metrics. Stdlib-only otherwise.
+# prometheus_client: service metrics (in-flight gauge, request counter, duration
+# histogram) exposed on /metrics. Stdlib-only otherwise.
 RUN pip install --no-cache-dir prometheus_client==0.21.1
 COPY book_metadata_api.py .
 EXPOSE 8080

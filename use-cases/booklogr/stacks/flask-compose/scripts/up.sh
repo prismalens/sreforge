@@ -7,7 +7,7 @@ compose() { docker compose -f "$STACK/compose/docker-compose.yml" "$@"; }
 bash "$STACK/scripts/setup.sh"
 
 mkdir -p "$STACK/.secrets"
-printf '%s' "${AGENT_WEBHOOK_URL:-http://host.docker.internal:3001/api/webhooks/prometheus}" > "$STACK/.secrets/webhook-url"
+printf '%s' "${AGENT_WEBHOOK_URL:-http://host.docker.internal:6473/api/webhooks/prometheus}" > "$STACK/.secrets/webhook-url"
 token="${AGENT_WEBHOOK_TOKEN:-}"
 [ -n "$token" ] || [ -z "${AGENT_WEBHOOK_TOKEN_FILE:-}" ] || token="$(cat "$AGENT_WEBHOOK_TOKEN_FILE")"
 printf '%s' "$token" > "$STACK/.secrets/webhook-token"

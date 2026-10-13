@@ -18,7 +18,7 @@ pnpm exec task dashboard                           # the same controls on http:/
 
 One fault is on at a time. Turning one on turns the current one off first.
 
-Every booklogr scenario fires the same `BooklogrApiLatencyP99High{service="booklogr-api"}`, so back to back they look like one alert refiring. An agent that dedupes refires (prismalens reopens an alert that refires within 15 minutes) folds them into the previous incident. Leave a gap longer than the agent's window after the alert clears.
+Every booklogr scenario fires the same `BooklogrApiLatencyP99High{service="booklogr-api"}`, so back to back they look like one alert refiring. prismalens reopens an incident when its alert refires within 24 hours of clearing (`PRISMALENS_ALERT_FLAP_WINDOW_MINUTES`, default 1440), so a second scenario folds into the previous incident. Resolve the incident in prismalens before starting the next scenario.
 
 ## What runs
 
@@ -38,7 +38,7 @@ An agent under test gets what a real one gets: the alert, the code, and the tele
 
 | Variable | Default |
 |---|---|
-| `AGENT_WEBHOOK_URL` | `http://host.docker.internal:3001/api/webhooks/prometheus` (prismalens `pl up`) |
+| `AGENT_WEBHOOK_URL` | `http://host.docker.internal:6473/api/webhooks/prometheus` (prismalens `pl up`) |
 | `AGENT_WEBHOOK_TOKEN`, or `AGENT_WEBHOOK_TOKEN_FILE` | none; sent as `Authorization: Bearer <token>` |
 
 `task status` shows Alertmanager's own count of webhook deliveries sent and failed. If `failed` climbs, `docker logs booklogr-alertmanager` says why.

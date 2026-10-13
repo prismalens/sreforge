@@ -20,7 +20,7 @@ if (args[0] === "status") {
       { service: "book-metadata", path: "/home/dev/sreforge/substrate/book-metadata", head: "def5678 Book metadata service" },
     ],
     links: { app: "http://localhost:5150", api: "http://localhost:5000", prometheus: "http://localhost:9090", alertmanager: "http://localhost:9093", grafana: "http://localhost:3002" },
-    receiver: { url: "http://host.docker.internal:3001/api/webhooks/prometheus", sent: 2, failed: 0 },
+    receiver: { url: "http://host.docker.internal:6473/api/webhooks/prometheus", sent: 2, failed: 0 },
   }));
 } else {
   console.log(`fake task ${args.join(" ")}`);

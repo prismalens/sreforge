@@ -13,7 +13,7 @@
     "judge:rca": "node tools/rca-judge/judge.mjs"
   },
   "devDependencies": {
-    "@go-task/cli": "^3.53.1"
+    "@go-task/cli": "^3.54.0"
   },
   "pnpm": {
     "onlyBuiltDependencies": [

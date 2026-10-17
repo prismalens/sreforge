@@ -9,13 +9,13 @@ importers:
   .:
     devDependencies:
       '@go-task/cli':
-        specifier: ^3.53.1
-        version: 3.53.1
+        specifier: ^3.54.0
+        version: 3.54.0
 
 packages:
 
-  '@go-task/cli@3.53.1':
-    resolution: {integrity: sha512-2yp991XAmiVJ4e8aoBt2acLl3vSrkCJl0mkdhMgx77QJX17BWJlfLQKAXs+osNGti0GbBqzCP8vsHrpxYfNoBg==}
+  '@go-task/cli@3.54.0':
+    resolution: {integrity: sha512-bnb6hoAQIscz4CbQ8Xl7sssUWTJLmSwi12SpDyyS9O58NDOlvjH/WA1pkb++7iuUy6uYqxOn5KVBIcWplMCADg==}
     hasBin: true
 
   '@isaacs/fs-minipass@4.0.1':
@@ -96,15 +96,15 @@ packages:
   inherits@2.0.4:
     resolution: {integrity: sha512-k/vGaX4/Yla3WzyMCvTQOXYeIHvqOKtnqBduzTHpzpQZzAskKMhZ2K+EnBiSM9zGSoIFeMpXKxa4dYeZIQqewQ==}
 
-  ip-address@10.7.2:
-    resolution: {integrity: sha512-7H/2gFSIitxc0hG3nOI1glS8QLo/EHBFFLk8vEUjXY/xu0AdL8jZ9U1IzO2PUm0d2D/ofQcAifb0g6OBkt8U7w==}
+  ip-address@10.7.4:
+    resolution: {integrity: sha512-DWBMKyeM25D70nrIiTkgQth59/G+naKOTep6huF9j+GmeK3DMD60Zvxg5d5qQnz+38AHgou6ean2LECX+lrKDg==}
     engines: {node: '>= 12'}
 
   isarray@1.0.0:
     resolution: {integrity: sha512-VLghIWNM6ELQzo7zwmcg0NmTVyWKYjvIeM83yjp0wRDTmUnrM678fQbcKBo6n2CJEF0szoG//ytg+TKla89ALQ==}
 
-  jszip@3.10.1:
-    resolution: {integrity: sha512-xXDvecyTpGLrqFrvkrUSoxxfJI5AH7U8zxxtVclpsUtMCq4JQ290LY8AW5c7Ggnr/Y/oK+bQMbqK2qmtk3pN4g==}
+  jszip@3.10.2:
+    resolution: {integrity: sha512-3l+rb15IOWtUhU0H5MFqES/T6Kh7abYwjosBey/vD6hDt8zoEffkSC5Ws5SGtgVw3gBx2NEbhTeSW1+kWkpyTQ==}
 
   lie@3.3.0:
     resolution: {integrity: sha512-UaiMJzeWRlEujzAuw5LokY1L5ecNQYZKfmyZ9L7wDHb/p5etKaxXhohBcrw0EYby+G/NA52vRSN4N39dxHAIwQ==}
@@ -208,9 +208,9 @@ packages:
 
 snapshots:
 
-  '@go-task/cli@3.53.1':
+  '@go-task/cli@3.54.0':
     dependencies:
-      jszip: 3.10.1
+      jszip: 3.10.2
       proxy-agent: 8.0.2
       tar: 7.5.22
     transitivePeerDependencies:
@@ -290,11 +290,11 @@ snapshots:
 
   inherits@2.0.4: {}
 
-  ip-address@10.7.2: {}
+  ip-address@10.7.4: {}
 
   isarray@1.0.0: {}
 
-  jszip@3.10.1:
+  jszip@3.10.2:
     dependencies:
       lie: 3.3.0
       pako: 1.0.11
@@ -387,7 +387,7 @@ snapshots:
 
   socks@2.8.10:
     dependencies:
-      ip-address: 10.7.2
+      ip-address: 10.7.4
       smart-buffer: 4.2.0
 
   source-map@0.6.1:
